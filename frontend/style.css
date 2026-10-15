@@ -32,14 +32,6 @@ body {
     overflow-x: hidden;
 }
 
-.container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 40px 20px;
-    position: relative;
-    z-index: 1;
-}
-
 /* Header with Sketch Style */
 .header {
     text-align: center;
@@ -76,6 +68,64 @@ body {
     font-size: 1.2em;
     color: var(--ink-secondary);
     font-weight: 500;
+}
+
+/* Session id (same id as in Langfuse Sessions), top-right corner, click to copy */
+.session-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    max-width: 340px;
+    padding: 8px 14px;
+    font: inherit;
+    text-align: left;
+    color: #ffffff;
+    background: var(--ink-primary);
+    border: 2px solid var(--ink-primary);
+    border-radius: 12px;
+    box-shadow: var(--shadow-soft);
+    cursor: pointer;
+}
+
+.session-badge:hover {
+    background: #1f2d3a;
+    box-shadow: var(--shadow-hover);
+}
+
+.session-badge-label {
+    font-size: 0.75em;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+.session-badge code {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #ffffff;
+    overflow-wrap: anywhere;
+}
+
+#sessionCopyLabel {
+    color: #f6c177;
+    text-transform: none;
+}
+
+/* Small screens: no room in the corner, show it under the title instead */
+@media (max-width: 900px) {
+    .session-badge {
+        position: static;
+        margin: 14px auto 0;
+        align-items: center;
+        text-align: center;
+    }
 }
 
 /* Clean Card Styles */
@@ -321,25 +371,9 @@ body {
     background: rgba(231, 76, 60, 0.05);
 }
 
-/* API Call Box */
-.api-call-box {
-    background: #f8f9fa;
-    border: 1px dashed var(--sketch-line);
-    border-radius: 5px;
-    padding: 15px;
-    margin: 10px 0;
-}
-
-.api-call-content {
-    font-size: 12px;
-    color: var(--ink-secondary);
-    font-family: 'JetBrains Mono', monospace;
-    overflow-x: auto;
-}
-
 /* HITL Panel (Sticky Note Style) */
 .hitl-panel {
-    display: none;
+    animation: stickyPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     background: #fff9c4;
     /* Yellow sticky note color */
     border: 1px solid #fbc02d;
@@ -364,11 +398,6 @@ body {
     border-left: 1px dashed rgba(0, 0, 0, 0.1);
     border-right: 1px dashed rgba(0, 0, 0, 0.1);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.hitl-panel.active {
-    display: block;
-    animation: stickyPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 @keyframes stickyPop {
@@ -404,21 +433,6 @@ body {
     font-size: 16px;
     margin-bottom: 10px;
     font-weight: 700;
-}
-
-.hitl-section ul li {
-    padding: 5px 0;
-    padding-left: 25px;
-    position: relative;
-    list-style: none;
-}
-
-.hitl-section ul li::before {
-    content: '✓';
-    position: absolute;
-    left: 0;
-    color: var(--success-green);
-    font-weight: bold;
 }
 
 .hitl-buttons {
@@ -539,23 +553,6 @@ body {
     color: var(--ink-secondary);
     font-size: 14px;
     margin-bottom: 10px;
-}
-
-.notice-steps-label {
-    font-weight: 600;
-    color: var(--ink-primary);
-    margin: 8px 0 6px;
-}
-
-.notice-steps {
-    margin-left: 18px;
-    color: var(--ink-secondary);
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.notice-steps li {
-    margin-bottom: 6px;
 }
 
 .notice-card code {
@@ -687,86 +684,6 @@ body {
     margin: 10px 0;
     border-left: 3px solid var(--accent-blue);
     font-family: 'JetBrains Mono', monospace;
-}
-
-.typing-cursor {
-    display: inline-block;
-    width: 2px;
-    height: 1em;
-    background-color: var(--ink-primary);
-    margin-left: 4px;
-    animation: blinkCursor 1s infinite;
-    vertical-align: middle;
-}
-
-/* Neural Pulse (Retuned for Light Theme) */
-.thinking-state {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-left: 3px solid var(--accent-orange);
-    border-radius: 6px;
-    animation: slideInLeftThinking 0.4s ease-out;
-    width: fit-content;
-    margin: 10px 0;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
-}
-
-.neural-pulse {
-    display: inline-block;
-    width: 40px;
-    height: 40px;
-    position: relative;
-}
-
-.neural-pulse::before,
-.neural-pulse::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    border: 2px solid var(--accent-orange);
-    /* Orange pulse */
-    animation: neuralExpand 2s ease-out infinite;
-}
-
-.neural-pulse::after {
-    animation-delay: 1s;
-}
-
-@keyframes neuralExpand {
-    0% {
-        width: 0;
-        height: 0;
-        opacity: 1;
-    }
-
-    100% {
-        width: 40px;
-        height: 40px;
-        opacity: 0;
-    }
-}
-
-.thinking-icon {
-    font-size: 24px;
-    animation: spinThinking 3s linear infinite;
-    opacity: 0.8;
-}
-
-@keyframes spinThinking {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 /* Responsive */
@@ -951,11 +868,6 @@ body {
     color: #95a5a6;
 }
 
-.chat-bubble-status {
-    font-size: 14px;
-    color: rgba(255,255,255,0.9);
-}
-
 .chat-sender {
     font-size: 13px;
     font-weight: 700;
@@ -1025,41 +937,6 @@ body {
     transform: none;
 }
 
-.chat-typing {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: white;
-    border-radius: 16px;
-    border: 2px solid var(--sketch-line);
-    width: fit-content;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.chat-typing-dots {
-    display: flex;
-    gap: 5px;
-}
-
-.chat-typing-dot {
-    width: 9px;
-    height: 9px;
-    background: var(--accent-blue);
-    border-radius: 50%;
-    animation: typingBounce 1.4s infinite ease-in-out;
-}
-
-.chat-typing-dot:nth-child(1) { animation-delay: 0s; }
-.chat-typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.chat-typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typingBounce {
-    0%, 60%, 100% { transform: translateY(0); }
-    30% { transform: translateY(-10px); }
-}
-
 .chat-status-bar {
     padding: 10px 20px;
     background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
@@ -1092,4 +969,219 @@ body {
         opacity: 0.6;
         transform: scale(0.9);
     }
+}
+
+/* ============================================
+   PAGE LAYOUT, MODAL, RESULTS, CHAT DRAFT
+   ============================================ */
+
+/* Elements with the `hidden` attribute are always invisible, even if a class sets display */
+[hidden] {
+    display: none !important;
+}
+
+body, button, input, textarea {
+    font-family: 'Inter', 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif;
+}
+
+#lightRaysBackground {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+#lightRaysBackground canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.main-layout {
+    display: flex;
+    gap: 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.left-panel {
+    flex: 1;
+    min-width: 0;
+}
+
+.right-panel {
+    width: 550px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 20px;
+    height: fit-content;
+}
+
+.right-panel .chat-messages {
+    height: 420px;
+}
+
+@media (max-width: 1000px) {
+    .main-layout {
+        flex-direction: column;
+    }
+
+    .right-panel {
+        width: 100%;
+        position: relative;
+        top: 0;
+    }
+}
+
+/* Editable message boxes (approval panel + chat draft) */
+.message-box {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    resize: vertical;
+}
+
+/* Negotiation form (modal) */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal h2 {
+    font-family: 'Architects Daughter', cursive;
+    margin-bottom: 20px;
+}
+
+.modal-target {
+    margin-bottom: 20px;
+    font-weight: bold;
+    color: var(--accent-blue);
+}
+
+.modal textarea,
+.modal input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--sketch-line);
+    border-radius: 6px;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+/* Results */
+.results-heading {
+    margin: 20px 0 12px;
+    font-family: 'Architects Daughter', cursive;
+}
+
+.results-heading.best {
+    color: var(--success-green);
+}
+
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.result-card.best {
+    border: 3px solid var(--success-green);
+    background: linear-gradient(135deg, #f0fff4 0%, #e8f5e9 100%);
+}
+
+.best-badge {
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: var(--success-green);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.negotiate-btn {
+    margin-top: 15px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+.empty {
+    text-align: center;
+    color: var(--ink-secondary);
+}
+
+.review-text {
+    margin: 5px 0;
+    color: #555;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.winner-summary {
+    white-space: pre-wrap;
+    background: rgba(39, 174, 96, 0.05);
+    border-left-color: var(--success-green);
+}
+
+/* Chat: agent's suggested reply waiting for approval */
+.chat-draft {
+    background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+    border-top: 2px solid #ffc107;
+    padding: 16px;
+}
+
+.chat-draft-title {
+    font-weight: 600;
+    color: #856404;
+    margin-bottom: 8px;
+}
+
+.chat-draft-reasoning {
+    font-size: 12px;
+    font-style: italic;
+    color: #666;
+    margin: 8px 0;
+}
+
+.chat-draft-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.chat-draft-buttons button {
+    flex: 1;
+    padding: 10px;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.chat-draft-send {
+    background: var(--success-green);
+}
+
+.chat-draft-skip {
+    background: #e74c3c;
 }

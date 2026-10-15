@@ -32,3 +32,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Google Drive login (never commit): OAuth client file and saved token
+google_oauth_client.json
+google_token.json
+client_secret*.json

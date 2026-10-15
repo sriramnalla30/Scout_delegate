@@ -1,12 +1,13 @@
+# Deploy the whole app (API + web page) to Render.com as one web service.
 services:
   - type: web
-    name: search-agent-api
+    name: place-discover-agent
     runtime: python
     plan: free
     branch: main
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: GROQ_API_KEY
         sync: false
@@ -16,6 +17,15 @@ services:
         sync: false
       - key: WEBSCRAPING_AI_API_KEY
         sync: false
-      - key: PORT
-        value: 10000
+      - key: DEFAULT_TARGET_NUMBER
+        sync: false
+      # Langfuse: every prompt is loaded from it, and traces are sent to it
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        sync: false
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
     autoDeploy: true

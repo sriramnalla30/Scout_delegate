@@ -1,58 +1,48 @@
-from pydantic_settings import BaseSettings
-from typing import Literal
+"""
+Settings for the whole app (API keys, phone numbers, model name).
+
+Values are read from the `.env` file in the project root (copy `.env.example`).
+Environment variable names are case-insensitive: GROQ_API_KEY -> settings.groq_api_key
+
+Use anywhere with:
+    from app.config import settings
+"""
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application configuration with environment variable support"""
-    
-    # Groq API Keys (replacing Gemini)
-    groq_api_key: str
-    groq_api_key_2: str = ""
-    serp_api_key: str
-    tavily_api_key: str = ""  # Optional
-    webscraping_ai_api_key: str = "" # For AI-powered Review Extraction
-    
-    # Application
-    environment: Literal["development", "production"] = "development"
-    database_path: str = "./data/checkpoints.db"
+    # extra="ignore" -> keys in .env that are not listed below are simply skipped
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # --- LLM (Groq) ---
+    groq_api_key: str                       # required
+    groq_api_key_2: str = ""                # optional; the router node uses it to spread rate limits
+    llm_model: str = "openai/gpt-oss-120b"  # check available ones: https://console.groq.com/docs/models
+
+    # --- Place search (SerpStack) ---
+    serp_api_key: str                       # required
+    serp_api_url: str = "https://api.serpstack.com/search"
+
+    # --- Review scraping (WebScraping.AI) ---
+    webscraping_ai_api_key: str = ""        # optional; without it reviews are skipped
+
+    # --- SMS (provider not wired up yet - Twilio is planned) ---
+    default_target_number: str = ""         # used when a shop has no phone number, e.g. +919876543210
+
+    # --- Langfuse: prompts (app/prompts.py) + tracing (app/telemetry.py) ---
+    langfuse_public_key: str                # required: every prompt is loaded from Langfuse
+    langfuse_secret_key: str                # required
+    langfuse_host: str = "https://cloud.langfuse.com"  # US projects: https://us.cloud.langfuse.com
+    langfuse_prompt_label: str = "production"  # which prompt version to use
+    langfuse_tracing: bool = True           # false = do not send traces (e.g. on your laptop)
+    service_name: str = "place-discover-agent"
+    deployment_environment: str = "local"
+
+    # --- Optional: also save traces as files in a Google Drive folder (app/drive_export.py) ---
+    drive_traces: bool = False              # true = save traces to Drive (log in first: scripts/google_drive_login.py)
+    drive_folder_name: str = "place-discover-traces"
+
     log_level: str = "INFO"
-    
-    # LLM Settings
-    llm_model: str = "llama-3.3-70b-versatile"  # Groq's best model
-    llm_temperature: float = 0.7
-    max_tokens: int = 2048
-    
-    # Agent Settings
-    max_iterations: int = 3
-    recursion_limit: int = 50
-    
-    # SerpStack API
-    serp_api_url: str = "http://api.serpstack.com/search"
-
-    # Default SMS routing (gateway-agnostic)
-    default_sender_number: str = ""  # Optional; depends on provider
-    default_target_number: str = ""  # Fallback recipient if place has no phone (E.164)
-
-    # (Legacy Twilio fields retained for compatibility; unused when messaging_provider=smsmobileapi)
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_messaging_service_sid: str = ""
-    twilio_phone_number: str = ""
-    twilio_target_number: str = ""
-
-    # Messaging Settings
-    messaging_provider: Literal["twilio", "smsmobileapi"] = "smsmobileapi"
-    smsmobileapi_key: str = ""  # Set in .env file
-
-    # LangSmith Settings (Optional)
-    langchain_tracing_v2: str = "true"
-    langchain_endpoint: str = "https://api.smith.langchain.com"
-    langchain_api_key: str = ""  # Set in .env file (optional)
-    langchain_project: str = "PlaceDiscoverAgent"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 settings = Settings()

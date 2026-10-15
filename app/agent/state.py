@@ -1,58 +1,34 @@
-from typing import TypedDict, Annotated
-from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage
+"""
+The agent's "memory" for one conversation.
+
+LangGraph passes this dictionary from node to node. A node reads what it needs
+and returns ONLY the keys it wants to change; LangGraph merges them in.
+The checkpointer (see graph.py) saves it after every node, per thread_id.
+"""
+from typing import TypedDict
 
 
-class AgentState(TypedDict):
-    """
-    State schema for the Negotiator Agent with Reflexion pattern.
-    
-    This state is shared across all nodes and persisted via checkpointer.
-    Uses Annotated with add_messages to append to message history.
-    """
-    
-    # Conversation history (using add_messages reducer)
-    messages: Annotated[list[BaseMessage], add_messages]
-    
-    # Initial search context
+class AgentState(TypedDict, total=False):
+    # ---------- Filled by POST /agent/start ----------
+    user_query: str            # what the user typed
     city: str
-    place_type: str
-    user_intent: str
-    user_query: str  # Original user query
-    budget: float | None
-    
-    # SERP & External Data
-    serp_results: list[dict]  # Raw SERP API results
-    tavily_reviews: list[dict]  # Tavily search results for reviews
-    reviews: dict[str, list[str]] # Detailed reviews for specific shops
-    
-    # Human-in-the-Loop
-    human_approved: bool
-    human_notes: str | None
-    
-    # Agent Workflow State
-    route: str  # "negotiation", "info_only", "comparison"
-    show_all: bool  # True if user wants all results, False if only best one
-    current_step: str  # Current node in workflow
-    
-    # Analysis & Reflexion
-    initial_analysis: list[dict]  # First pass analysis
-    shop_responses: list[dict]  # Simulated shop communications
-    refined_analysis: list[dict]  # After reflexion
-    iteration: int  # Reflexion loop counter
-    
-    # Negotiation State
-    negotiation_active: bool
-    negotiation_history: list[dict]  # Chat history with shop: [{"role": "agent", "content": "..."}]
-    negotiation_status: str  # "ongoing", "success", "failed", "rejected"
-    planned_message: str  # Draft message for HITL review
-    shop_persona: str  # Simulated shopkeeper personality (e.g. "stubborn", "friendly")
-    target_price: float | None # User's desired price
-    negotiation_start_time: int | None  # Unix timestamp when negotiation started (for filtering old messages)
-    
-    # Final Output
-    recommendations: list[dict] | None
-    is_complete: bool
-    
-    # Metadata
-    thread_id: str
+    place_type: str            # "gym", "cafe", ...
+    user_intent: str           # "best reviewed", "cheapest", ...
+    serp_results: list[dict]   # all places found by SerpStack
+
+    # ---------- Router ----------
+    route: str                 # "search" or "negotiate"
+
+    # ---------- Search path ----------
+    show_all: bool             # True = list every place, False = pick one winner
+    recommendations: list[dict]          # places to show, best first
+    reviews: dict[str, list[str]]        # {place name: [review, review, ...]}
+    winner_summary: str                  # LLM's explanation of why the winner won
+
+    # ---------- Negotiation path ----------
+    target_price: float | None
+    negotiation_history: list[dict]      # [{"role": "agent" | "shopkeeper", "content": "...", "timestamp": int}]
+    negotiation_status: str              # see NegotiationStatus in negotiation_nodes.py
+    negotiation_start_time: int          # unix time; older SMS in the inbox are ignored
+    planned_message: str                 # SMS drafted by the LLM, waiting for human approval
+    strategy_reasoning: str              # why the LLM wrote that SMS

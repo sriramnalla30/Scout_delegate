@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- EDIT: 2-4 word title, and one-sentence description -->
+<title>Langfuse Prompts and Tracing</title>
+<meta name="description" content="Narrated, beginner-friendly walkthrough of how Place Discover loads every prompt from Langfuse and sends traces and sessions to Langfuse.">
+<style>
+/* =====================================================================
+   ENGINE STYLES: normally no need to edit. Colours are tokens; dark mode
+   is automatic. --c1..--c5 are the "packet" colours used by LEGEND.
+   ===================================================================== */
+:root {
+  --bg: #f6f7fb; --panel: #ffffff; --ink: #1b2030; --muted: #5d6478; --line: #c9cedb;
+  --comp: #ffffff; --group: #eef1f8; --accent: #4f6bff; --accent-soft: rgba(79,107,255,.14);
+  --c1: #64708a; --c2: #3d7bff; --c3: #9b5cf6; --c4: #e8961c; --c5: #16a38a;
+  --ok: #16a34a; --bad: #e5484d; --code-bg: #f1f3f9;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1218; --panel: #171b24; --ink: #e7eaf2; --muted: #98a0b5; --line: #353c4d;
+    --comp: #1d2230; --group: #141821; --accent: #7d93ff; --accent-soft: rgba(125,147,255,.18);
+    --c1: #8d97ad; --c2: #6b9bff; --c3: #b48cff; --c4: #f3ad48; --c5: #34c9ac;
+    --ok: #3ccf73; --bad: #ff6b6f; --code-bg: #10141c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1218; --panel: #171b24; --ink: #e7eaf2; --muted: #98a0b5; --line: #353c4d;
+  --comp: #1d2230; --group: #141821; --accent: #7d93ff; --accent-soft: rgba(125,147,255,.18);
+  --c1: #8d97ad; --c2: #6b9bff; --c3: #b48cff; --c4: #f3ad48; --c5: #34c9ac;
+  --ok: #3ccf73; --bad: #ff6b6f; --code-bg: #10141c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code, pre, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+header h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -.01em; }
+header p { margin: 0; color: var(--muted); }
+.top { display: flex; gap: 16px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.theme-btn { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+
+/* stage + diagram */
+.stage { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.stage svg { display: block; width: 100%; height: auto; }
+.stage-scroll { overflow-x: auto; }
+@media (max-width: 700px) { .stage-scroll svg { min-width: 760px; } }
+.container rect { fill: var(--group); stroke: var(--line); stroke-dasharray: 5 4; }
+.container .ct { font-size: 14px; font-weight: 650; fill: var(--ink); }
+.container .cs { font-size: 11px; fill: var(--muted); }
+.node rect { fill: var(--comp); stroke: var(--line); stroke-width: 1.3; transition: stroke .3s, fill .3s; }
+.node .t1 { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.node .t2 { font-size: 10.5px; fill: var(--muted); }
+.node, .container, .wire { transition: opacity .45s; }
+.node.ext rect { fill: var(--group); }
+.sec { font-size: 10.5px; font-weight: 700; fill: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.dim { opacity: .18; }
+.node.hot rect { stroke: var(--accent); stroke-width: 2.6; fill: var(--accent-soft); }
+.container.hot rect { stroke: var(--accent); stroke-width: 2; }
+.node.flash rect { animation: flash .9s ease-out; }
+@keyframes flash { 0% { stroke-width: 5; stroke: var(--accent); } 100% { stroke-width: 2.6; } }
+.node.off rect { stroke-dasharray: 3 3; fill: transparent; }
+.node.off .t1, .node.off .t2 { fill: var(--muted); text-decoration: line-through; }
+.container.sleep rect { fill: transparent; stroke: var(--muted); }
+.slot { fill: transparent; stroke: var(--line); }
+.slot.filled { fill: var(--c2); stroke: var(--c2); }
+.wire { fill: none; stroke: var(--line); stroke-width: 1.6; }
+.wire.live { stroke: var(--accent); stroke-dasharray: 7 6; animation: flow .9s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -26; } }
+.pk-label { font-size: 10.5px; font-weight: 650; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.badge { font-size: 12px; font-weight: 700; }
+body.paused *, body.paused *::before { animation-play-state: paused !important; }
+
+/* captions */
+.caption { border-top: 1px solid var(--line); padding: 12px 18px 14px; min-height: 92px; }
+.caption .speaker { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+.wave { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+.wave i { width: 3px; background: var(--accent); border-radius: 2px; height: 4px; }
+.speaking .wave i { animation: wave .9s ease-in-out infinite; }
+.speaking .wave i:nth-child(2) { animation-delay: .15s; } .speaking .wave i:nth-child(3) { animation-delay: .3s; } .speaking .wave i:nth-child(4) { animation-delay: .45s; }
+@keyframes wave { 0%,100% { height: 3px; } 50% { height: 12px; } }
+#capText { font-size: 17px; line-height: 1.5; margin-top: 4px; }
+.term { display: none; margin-top: 8px; font-size: 13.5px; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 6px; padding: 6px 10px; }
+.term.show { display: block; animation: fadein .4s; }
+.term b { color: var(--accent); }
+
+/* start overlay */
+.overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(4px); }
+.overlay.gone { display: none; }
+.overlay .box { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px 26px; max-width: 460px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.18); }
+.overlay h2 { margin: 0 0 6px; font-size: 21px; }
+.overlay p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.overlay button { display: block; width: 100%; margin: 8px 0; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: var(--comp); color: var(--ink); }
+.overlay button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.overlay small { color: var(--muted); font-size: 12px; }
+.devwarn { display: none; margin-top: 10px; color: var(--bad); font-size: 12.5px; text-align: left; white-space: pre-wrap; }
+
+/* player */
+.player { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.player button, .player select { background: var(--comp); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; height: 34px; min-width: 38px; font-size: 15px; cursor: pointer; }
+.player select { font-size: 13px; max-width: 220px; }
+.player button.primary { background: var(--accent); color: #fff; border-color: var(--accent); min-width: 46px; }
+.bar { flex: 1 1 260px; display: flex; gap: 3px; min-width: 200px; }
+.seg { flex: 1; height: 8px; border-radius: 4px; background: var(--line); cursor: pointer; position: relative; overflow: hidden; }
+.seg i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); }
+.clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 54px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+
+/* chapter text + detail panel */
+.below { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; margin-top: 16px; }
+@media (max-width: 900px) { .below { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.kicker { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+#sTitle { margin: 4px 0 10px; font-size: 21px; line-height: 1.25; }
+#sBody p { margin: 0 0 10px; }
+#sBody ul { margin: 0 0 10px; padding-left: 20px; }
+.codefile { display: inline-block; font-size: 12px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; margin: 2px 4px 2px 0; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5; overflow-x: auto; margin: 10px 0 0; }
+.hl { background: var(--accent-soft); border-radius: 3px; }
+.dt { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+h3 { margin: 0 0 10px; font-size: 15px; }
+.gloss { margin-top: 16px; }
+.gloss dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 16px; margin: 0; }
+.gloss dl div { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 13.5px; animation: fadein .5s; }
+.gloss dt { font-weight: 700; color: var(--accent); }
+.gloss dd { margin: 2px 0 0; color: var(--ink); }
+.gloss .empty { color: var(--muted); font-size: 13.5px; }
+
+/* reusable panel widgets (see SKILL.md "Panel widgets") */
+.wf { font-size: 12.5px; }
+.wf-row { display: grid; grid-template-columns: 230px 1fr 56px; gap: 8px; align-items: center; height: 26px; opacity: 0; transform: translateY(4px); transition: opacity .35s, transform .35s; }
+.wf-row.show { opacity: 1; transform: none; }
+.wf-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-track { position: relative; height: 12px; background: var(--code-bg); border-radius: 3px; }
+.wf-bar { position: absolute; top: 0; bottom: 0; border-radius: 3px; width: 0; transition: width .7s ease-out; }
+.wf-ms { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .wf-row { grid-template-columns: 150px 1fr 48px; } }
+.cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 640px) { .cards3 { grid-template-columns: 1fr; } }
+.mini { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; transition: background .3s, border-color .3s, transform .3s; }
+.mini b { display: block; margin-bottom: 3px; }
+.mini.on { border-color: var(--accent); background: var(--accent-soft); transform: translateY(-2px); }
+.mini .eg { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+.steps li { counter-increment: s; padding: 7px 10px 7px 38px; position: relative; border-radius: 8px; color: var(--muted); transition: background .3s, color .3s; font-size: 13.5px; }
+.steps li::before { content: counter(s); position: absolute; left: 10px; top: 7px; width: 20px; height: 20px; border-radius: 50%; background: var(--line); color: var(--panel); font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.steps li.on { background: var(--accent-soft); color: var(--ink); }
+.steps li.on::before { background: var(--accent); color: #fff; }
+.tl { display: flex; flex-wrap: wrap; }
+.tl div { flex: 1 1 110px; border-top: 4px solid var(--line); padding: 8px 6px 0 0; font-size: 12.5px; color: var(--muted); transition: border-color .3s, color .3s; }
+.tl div.on { border-color: var(--accent); color: var(--ink); }
+.tl b { display: block; font-size: 12px; }
+.url { font-size: 12.5px; word-break: break-all; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 4px 0 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.num { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.bump { animation: bump .5s; }
+@keyframes bump { 0% { color: var(--c4); transform: scale(1.25); } 100% { transform: none; } }
+.logs { font-size: 12px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 96px; margin-top: 10px; }
+.logs div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: fadein .4s; }
+.status { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 700; }
+.status.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.status.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.alert { border: 1px solid var(--bad); border-radius: 10px; padding: 10px 12px; font-size: 13px; opacity: 0; transition: opacity .4s; }
+.alert.on { opacity: 1; }
+.hidden { visibility: hidden; }
+@keyframes fadein { from { opacity: 0; } }
+
+/* EDIT (optional): styles for your own panel widgets go here */
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <header>
+      <h1 id="hTitle"></h1>
+      <p id="hSub"></p>
+    </header>
+    <button class="theme-btn" id="themeBtn" type="button">◐ Theme</button>
+  </div>
+
+  <div class="stage">
+    <div class="overlay" id="overlay">
+      <div class="box">
+        <h2 id="oTitle"></h2>
+        <p id="oSub"></p>
+        <button class="primary" id="startVoice" type="button">▶ Play with voice narration</button>
+        <button id="startSilent" type="button">Play silently (subtitles only)</button>
+        <small>The voice is your browser's built-in speech engine. It sounds best in Microsoft Edge (Natural voices) or Chrome.</small>
+        <div class="devwarn" id="devwarn"></div>
+      </div>
+    </div>
+    <div class="stage-scroll"><svg id="svg" viewBox="0 0 1200 650" role="img" aria-label="Animated diagram"></svg></div>
+    <div class="caption" id="caption" aria-live="polite">
+      <div class="speaker"><span class="wave"><i></i><i></i><i></i><i></i></span><span id="spk">Narrator</span></div>
+      <div id="capText">Press play to start.</div>
+      <div class="term" id="term"></div>
+    </div>
+    <div class="player">
+      <button id="prev" title="Previous chapter (←)">⏮</button>
+      <button id="play" class="primary" title="Play / pause (space)">▶</button>
+      <button id="next" title="Next chapter (→)">⏭</button>
+      <button id="replay" title="Replay chapter (R)">↺</button>
+      <button id="voiceBtn" title="Voice on / off (V)">🔊</button>
+      <div class="bar" id="bar"></div>
+      <span class="clock" id="clock"></span>
+      <select id="speed" title="Speed">
+        <option value="0.75">0.75×</option><option value="0.9">0.9×</option>
+        <option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+      </select>
+      <select id="voiceSel" title="Narrator voice"></select>
+    </div>
+    <div class="player" style="padding-top:0;border-top:0"><div class="legend" id="legend"></div></div>
+  </div>
+
+  <div class="below">
+    <div class="card">
+      <div class="kicker" id="sKicker"></div>
+      <h2 id="sTitle"></h2>
+      <div id="sBody"></div>
+    </div>
+    <div class="card" id="detail"></div>
+  </div>
+
+  <div class="card gloss">
+    <h3>📘 Words explained so far</h3>
+    <dl id="gloss"><span class="empty">Terms appear here as the narrator explains them.</span></dl>
+  </div>
+</div>
+
+<script>
+/* #####################################################################
+   ENGINE: do not edit (virtual clock, voice, SVG + animation helpers,
+   captions, glossary, player). Your content goes in the two EDIT
+   sections further down: DIAGRAM and SCENES.
+   ##################################################################### */
+
+/* ---- virtual clock: animations run on vt; it stops while paused, scales with speed ---- */
+let vt = 0, last = performance.now(), paused = true, speed = 1;
+let waiters = [];
+const anims = new Set();
+function loop(now) {
+  const dt = Math.min(now - last, 100); last = now;
+  if (!paused) vt += dt * speed;
+  for (const a of [...anims]) a(vt);
+  for (let i = waiters.length - 1; i >= 0; i--) if (vt >= waiters[i].t) waiters.splice(i, 1)[0].res();
+  updateBar();
+  requestAnimationFrame(loop);
+}
+const wait = ms => new Promise(res => waiters.push({ t: vt + ms, res }));
+const CANCEL = Symbol("cancel");
+let tok = 0;
+const guard = t => { if (t !== tok) throw CANCEL; };
+const w = async (ms, t) => { await wait(ms); guard(t); };
+const $ = id => document.getElementById(id);
+
+/* ---- voice: Web Speech API, spoken sentence by sentence ---- */
+const synth = window.speechSynthesis || null;
+let voiceOn = true, voice = null, curSpeech = null;
+const keepAlive = [];   // Chrome drops onend of garbage-collected utterances
+function pickVoices() {
+  if (!synth) { $("voiceSel").style.display = "none"; return; }
+  const vs = synth.getVoices().filter(v => /^en/i.test(v.lang));
+  if (!vs.length) return;
+  const prefs = [/natural/i, /Google US English/i, /Google UK English Female/i, /Aria|Jenny|Guy|Zira|Samantha/i, /en-IN/i, /en-US/i];
+  let best = null;
+  for (const re of prefs) { best = vs.find(v => re.test(v.name) || re.test(v.lang)); if (best) break; }
+  const sel = $("voiceSel"), keep = voice ? voice.name : null;
+  sel.innerHTML = vs.map(v => `<option value="${v.name}">${v.name.replace(/Microsoft |Online |\(Natural\)/g, "").trim()} · ${v.lang}</option>`).join("");
+  voice = vs.find(v => v.name === keep) || best || vs[0];
+  sel.value = voice.name;
+}
+if (synth) { pickVoices(); synth.onvoiceschanged = pickVoices; }
+$("voiceSel").onchange = e => { voice = synth.getVoices().find(v => v.name === e.target.value) || voice; };
+function setSpeaking(on) { $("caption").classList.toggle("speaking", on); }
+function utter(sp) {
+  const u = new SpeechSynthesisUtterance(sp.parts[sp.i]);
+  if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-US";
+  u.rate = Math.max(.6, Math.min(1.8, speed)) * 0.97;
+  const done = () => {
+    if (sp.u !== u || sp.stopped || sp.finished) return;
+    sp.i++;
+    if (sp.i < sp.parts.length) utter(sp); else finishSpeech(sp);
+  };
+  u.onend = done; u.onerror = done;
+  sp.u = u; keepAlive.push(u); if (keepAlive.length > 30) keepAlive.shift();
+  synth.speak(u); setSpeaking(true);
+}
+function finishSpeech(sp) {
+  if (sp.finished) return;
+  sp.finished = true; sp.stopped = true;
+  if (curSpeech === sp) curSpeech = null;
+  setSpeaking(false); sp.res();
+}
+function speak(text) {
+  const words = text.split(/\s+/).length;
+  if (!voiceOn || !synth) return wait(Math.max(1600, words * 300));     // subtitles-only reading pace
+  return new Promise(res => {
+    const sp = { parts: text.match(/[^.!?]+[.!?]*\s*/g) || [text], i: 0, res, stopped: false, finished: false };
+    curSpeech = sp;
+    if (!paused) utter(sp);
+    wait(words * 900 + 6000).then(() => { if (!sp.finished) { synth.cancel(); finishSpeech(sp); } });  // safety net
+  });
+}
+function stopSpeech() {
+  if (curSpeech) { curSpeech.stopped = true; curSpeech.finished = true; curSpeech = null; }
+  if (synth && (synth.speaking || synth.pending)) synth.cancel();
+  setSpeaking(false);
+}
+
+/* ---- SVG builders ---- */
+const NS = "http://www.w3.org/2000/svg";
+const svg = $("svg");
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, cls, anchor) {
+  const t = el("text", { x, y, class: cls }, parent);
+  if (anchor) t.setAttribute("text-anchor", anchor);
+  t.textContent = s; return t;
+}
+const LAYER = { cont: el("g", {}, svg), wires: el("g", {}, svg), nodes: el("g", {}, svg), packets: el("g", {}, svg) };
+/** Dashed group box with a title at top-left (e.g. "Cloud server"). */
+function container(id, x, y, w, h, title, sub) {
+  const g = el("g", { id, class: "container" }, LAYER.cont);
+  el("rect", { x, y, width: w, height: h, rx: 14 }, g);
+  txt(g, x + 16, y + 24, title, "ct");
+  if (sub) txt(g, x + 16, y + 40, sub, "cs");
+  return g;
+}
+/** Component box with centred title (+ optional subtitle). kind "ext" = outside system. */
+function box(id, x, y, w, h, title, sub, kind = "") {
+  const g = el("g", { id, class: "node " + kind }, LAYER.nodes);
+  el("rect", { x, y, width: w, height: h, rx: 8 }, g);
+  if (title) txt(g, x + w / 2, sub ? y + h / 2 - 2 : y + h / 2 + 4, title, "t1", "middle");
+  if (sub) txt(g, x + w / 2, y + h / 2 + 13, sub, "t2", "middle");
+  return g;
+}
+/** Panel-like node with title at top-left, for grouping smaller boxes inside it. */
+function panel(id, x, y, w, h, title, sub) {
+  const g = el("g", { id, class: "node" }, LAYER.nodes);
+  el("rect", { x, y, width: w, height: h, rx: 10 }, g);
+  txt(g, x + 14, y + 21, title, "t1");
+  if (sub) txt(g, x + w - 14, y + 21, sub, "t2", "end");
+  return g;
+}
+/** Box with 8 "slots" that fill up (queues, buffers, batches). Use fill(id, n). */
+function slotBox(id, x, y, w, h, title) {
+  const g = el("g", { id, class: "node" }, LAYER.nodes);
+  el("rect", { x, y, width: w, height: h, rx: 8 }, g);
+  txt(g, x + 12, y + 18, title, "t1");
+  for (let i = 0; i < 8; i++) el("rect", { id: `${id}_s${i}`, x: x + 12 + i * 31, y: y + 28, width: 26, height: 16, rx: 3, class: "slot" }, g);
+  return g;
+}
+/** Section label inside a panel. */
+function label(x, y, s) { return txt(LAYER.nodes, x, y, s, "sec"); }
+/** Connector path; packets travel along it. Use SVG path syntax (M x,y L x,y or C curves). */
+function wire(id, d) { return el("path", { id: "w_" + id, d, class: "wire" }, LAYER.wires); }
+
+/* ---- animation helpers ---- */
+let COLORS = {};
+const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+/** Move a dot (or big=true: a box) of colour `kind` along wire `path`. Resolves on arrival. */
+function packet(path, kind, opts = {}) {
+  const { label = "", dur = 1100, r = 7, reverse = false, big = false } = opts;
+  const p = $("w_" + path);
+  if (!p) { console.warn("packet: no wire named", path); return Promise.resolve(); }
+  const L = p.getTotalLength(), g = el("g", {}, LAYER.packets);
+  if (big) el("rect", { x: -16, y: -9, width: 32, height: 18, rx: 4, fill: COLORS[kind] }, g);
+  else el("circle", { r, fill: COLORS[kind] }, g);
+  if (label) { const t = txt(g, 0, -13, label, "pk-label", "middle"); t.setAttribute("fill", COLORS[kind]); }
+  p.classList.add("live");
+  const t0 = vt;
+  return new Promise(res => {
+    const f = t => {
+      const q = Math.min(1, (t - t0) / dur), e = ease(q);
+      const pt = p.getPointAtLength(L * (reverse ? 1 - e : e));
+      g.setAttribute("transform", `translate(${pt.x},${pt.y})`);
+      if (q >= 1) { anims.delete(f); g.remove(); res(); }
+    };
+    anims.add(f); f(vt);
+  });
+}
+const go = async (t, ...a) => { await packet(...a); guard(t); };          // one packet, then continue
+const all = async (t, ...ps) => { await Promise.all(ps); guard(t); };      // several packets at once
+const ALL_NODES = () => [...document.querySelectorAll(".node, .container")];
+/** Spotlight: dim everything except these node ids and these wire names. */
+function focus(ids, wires = []) {
+  const keep = new Set(ids);
+  ALL_NODES().forEach(n => n.classList.toggle("dim", !keep.has(n.id)));
+  document.querySelectorAll(".wire").forEach(p => p.classList.toggle("dim", !wires.includes(p.id.slice(2))));
+}
+function unfocus() { ALL_NODES().forEach(n => n.classList.remove("dim")); document.querySelectorAll(".wire").forEach(p => p.classList.remove("dim")); }
+function hot(...ids) { ids.forEach(id => { const n = $(id); if (!n) return console.warn("hot: no node", id); n.classList.add("hot", "flash"); setTimeout(() => n.classList.remove("flash"), 900); }); }
+function cool(...ids) { ids.forEach(id => $(id)?.classList.remove("hot")); }
+function fill(id, n) { for (let i = 0; i < 8; i++) $(`${id}_s${i}`).classList.toggle("filled", i < n); }
+const on = (id, v = true) => $(id).classList.toggle("on", v);           // highlight a .mini card etc.
+/** Waterfall row in a <div class="wf" id="wf"> panel: name, indent depth, start %, width %, label, colour kind. */
+function wfRow(name, depth, start, width, ms, kind) {
+  const row = document.createElement("div");
+  row.className = "wf-row";
+  row.innerHTML = `<div class="wf-name" style="padding-left:${depth * 14}px">${name}</div>
+    <div class="wf-track"><div class="wf-bar" style="left:${start}%;background:${COLORS[kind]}"></div></div><div class="wf-ms">${ms}</div>`;
+  $("wf").appendChild(row);
+  requestAnimationFrame(() => { row.classList.add("show"); row.querySelector(".wf-bar").style.width = width + "%"; });
+}
+/** Highlight item i of a <ol class="steps"> or <div class="tl"> in the panel (-1 = none). */
+function stepOn(i) { document.querySelectorAll("#detail .steps li, #detail .tl div").forEach((li, k) => li.classList.toggle("on", k === i)); }
+const rid = n => [...crypto.getRandomValues(new Uint8Array(n))].map(b => b.toString(16).padStart(2, "0")).join("");
+async function typeInto(elm, s, t, per = 28) { elm.textContent = ""; for (const ch of s) { elm.textContent += ch; await w(per, t); } }
+
+/* ---- captions + glossary ---- */
+const learned = new Set();
+function showCaption(line) {
+  $("capText").textContent = line.say;
+  const term = $("term");
+  if (line.term) {
+    term.innerHTML = `📘 <b>${line.term[0]}</b>: ${line.term[1]}`;
+    term.classList.remove("show"); void term.offsetWidth; term.classList.add("show");
+    if (!learned.has(line.term[0])) {
+      learned.add(line.term[0]);
+      const g = $("gloss"); g.querySelector(".empty")?.remove();
+      const d = document.createElement("div");
+      d.innerHTML = `<dt>${line.term[0]}</dt><dd>${line.term[1]}</dd>`;
+      g.appendChild(d);
+    }
+  } else term.classList.remove("show");
+}
+/** THE sync primitive: speak lines[i] while anim() plays; continue when BOTH are done. */
+let segIdx = 0, segStart = 0, segEst = 1, sceneDone = false;
+async function seg(t, i, anim) {
+  const line = SCENES[cur].lines[i];
+  segIdx = i; segStart = vt; segEst = Math.max(1600, line.say.split(/\s+/).length * 330);
+  showCaption(line);
+  await Promise.all([speak(line.say), anim ? anim() : null]);
+  guard(t);
+}
+const resetHooks = [];
+function reset() {
+  anims.clear(); waiters = [];
+  stopSpeech();
+  LAYER.packets.innerHTML = "";
+  document.querySelectorAll(".hot,.dim,.live,.off,.sleep,.filled,.flash").forEach(n => n.classList.remove("hot", "dim", "live", "off", "sleep", "filled", "flash"));
+  resetHooks.forEach(f => f());
+}
+
+/* #####################################################################
+   EDIT 1 of 2: META, LEGEND and DIAGRAM
+   ##################################################################### */
+const META = {
+  title: "How prompts and tracing work (Langfuse)",
+  subtitle: "A narrated, beginner-friendly walkthrough: every prompt comes from Langfuse, and every request is traced back to it.",
+  overlayTitle: "🎧 Langfuse for beginners",
+};
+const LEGEND = [
+  ["req", "web request", "var(--c1)"],
+  ["span", "trace span", "var(--c2)"],
+  ["ai", "AI call", "var(--c3)"],
+  ["prompt", "prompt", "var(--c4)"],
+  ["session", "session id", "var(--c5)"],
+];
+
+// Left column: laptop (last chapter only), browser, saved prompts folder
+const laptop = box("laptop", 20, 40, 140, 110, "Your laptop", "LANGFUSE_TRACING=false");
+box("browser", 20, 250, 140, 110, "Browser", "session id top-right");
+box("folder", 20, 450, 140, 90, "prompts/ folder", "saved copy · not read", "ext");
+
+// The app on Render
+container("render", 180, 30, 580, 550, "Render · your app", "one Python process");
+const renderStatus = txt($("render"), 744, 54, "", "badge", "end");
+box("fastapi", 200, 75, 210, 60, "FastAPI", "/agent/start · /agent/stream");
+panel("langgraph", 200, 160, 210, 230, "LangGraph agent");
+[["n_rank", "rank_places"], ["n_fetch", "fetch_reviews"], ["n_pick", "pick_winner"], ["n_judge", "check_negotiation"], ["n_draft", "draft_message"]]
+  .forEach(([id, name], i) => box(id, 215, 190 + i * 34, 180, 28, name));
+panel("clients", 200, 410, 210, 150, "Outbound clients");
+box("c_groq", 215, 440, 180, 26, "langchain-groq → AI");
+box("c_req", 215, 472, 180, 26, "requests → web APIs");
+box("c_sms", 215, 504, 180, 26, "sms (provider TBD)");
+box("loader", 435, 75, 305, 70, "Prompt loader", "app/prompts.py · 60 s cache");
+panel("sdk", 435, 165, 305, 395, "OpenTelemetry SDK", "app/telemetry.py");
+label(450, 203, "① instrumentors");
+box("i_fa", 450, 211, 275, 26, "FastAPIInstrumentor");
+box("i_req", 450, 243, 275, 26, "RequestsInstrumentor + redact");
+box("i_lc", 450, 275, 275, 26, "LangChainInstrumentor");
+label(450, 325, "② tagger");
+box("tagger", 450, 333, 275, 40, "Tagger", "+ session id + prompt version");
+label(450, 393, "③ buffer & send");
+slotBox("buf", 450, 401, 275, 56, "Buffer (BatchSpanProcessor)");
+box("exporter", 450, 469, 275, 40, "OTLP exporter", "→ Langfuse every ~5 s");
+
+// Outside services
+box("x_groq", 180, 595, 130, 45, "Groq", "openai/gpt-oss-120b", "ext");
+box("x_serp", 320, 595, 120, 45, "SerpStack", "place search", "ext");
+box("x_webscr", 450, 595, 150, 45, "WebScraping.AI", "reviews", "ext");
+box("x_sms", 610, 595, 150, 45, "Twilio (planned)", "shop SMS", "ext");
+
+// Langfuse
+container("langfuse", 790, 30, 390, 610, "Langfuse Cloud · Hobby (free)", "prompts + traces");
+box("lf_ep", 810, 75, 350, 46, "OTLP endpoint", "/api/public/otel");
+panel("lf_trace", 810, 140, 350, 130, "Tracing");
+const tr = [190, 215, 240].map(y => txt($("lf_trace"), 826, y, "", "t2"));
+panel("lf_sess", 810, 290, 350, 110, "Sessions");
+const ss = [340, 365].map(y => txt($("lf_sess"), 826, y, "", "t2"));
+panel("lf_prompts", 810, 420, 350, 200, "Prompts", "label: production");
+[["p_qp", "query-parser"], ["p_dd", "display-decision"], ["p_pw", "pick-winner"], ["p_re", "review-extractor"], ["p_nj", "negotiation-judge"], ["p_nd", "negotiation-drafter"]]
+  .forEach(([id, name], i) => box(id, i % 2 ? 990 : 825, 455 + Math.floor(i / 2) * 40, i % 2 ? 155 : 155, 30, name));
+const verTxt = txt($("lf_prompts"), 826, 605, "", "t2");
+
+// Wires
+wire("req", "M160,305 C185,305 180,105 200,105");
+wire("fa_lg", "M305,135 L305,160");
+wire("lg_clients", "M305,390 L305,410");
+wire("fa_clients", "M200,120 C185,135 185,440 200,453");
+wire("clients_groq", "M245,560 L245,595");
+wire("clients_serp", "M330,560 C330,578 380,578 380,595");
+wire("clients_webscr", "M360,560 C360,580 525,578 525,595");
+wire("clients_sms", "M395,560 C395,585 685,575 685,595");
+wire("lf_loader", "M810,520 C772,520 772,110 740,110");
+wire("loader_fa", "M435,95 L410,95");
+wire("loader_lg", "M435,125 C422,125 422,205 410,205");
+wire("fa_instr", "M410,115 C430,115 432,224 450,224");
+wire("lg_instr", "M410,240 C428,240 432,288 450,288");
+wire("llm_instr", "M410,453 C432,453 436,292 450,292");
+wire("req_instr", "M410,485 C438,485 440,256 450,256");
+wire("instr_tag", "M587,301 L587,333");
+wire("tag_buf", "M587,373 L587,401");
+wire("buf_exp", "M587,457 L587,469");
+wire("exp_lf", "M725,489 C770,489 770,98 810,98");
+wire("ep_trace", "M985,121 L985,140");
+wire("trace_sess", "M985,270 L985,290");
+wire("laptop_browser", "M90,150 L90,250");
+
+resetHooks.push(() => {
+  laptop.style.display = "none";
+  renderStatus.textContent = "";
+  [...tr, ...ss].forEach(x => { x.textContent = ""; });
+  verTxt.textContent = "query-parser · pick-winner · … all v1";
+});
+
+/* #####################################################################
+   EDIT 2 of 2: SCENES (chapters)
+   ##################################################################### */
+const SID = "3f2b8c1e-5d7a-4c19-9e0b-7a6d2c4f8e11";   // sample session id (not real)
+const PROMPT_ROWS = [["p_qp", "query-parser"], ["p_dd", "display-decision"], ["p_pw", "pick-winner"], ["p_re", "review-extractor"], ["p_nj", "negotiation-judge"], ["p_nd", "negotiation-drafter"]];
+
+const SCENES = [
+/* 1 ---------------------------------------------------------------- */
+{
+  title: "What is observability? (start here)",
+  body: `<p><b>Observability</b> means seeing what happens inside your running app, using the data it sends out about itself.</p>
+  <p>Think of a restaurant. The <b>LLM</b> (the AI model) is the cook, the <b>prompt</b> is the recipe card you hand to the cook, and a <b>trace</b> is the order-tracking screen that shows every step of one order.</p>
+  <p><b>Langfuse</b> is both the recipe book (it stores every prompt) and the tracking screen (it shows every trace).</p>`,
+  panel: `<h3>The restaurant analogy</h3>
+  <div class="cards3">
+    <div class="mini" id="a_cook"><b>🍳 LLM = the cook</b>Reads instructions, writes answers.<div class="eg">Here: gpt-oss-120b on Groq.</div></div>
+    <div class="mini" id="a_recipe"><b>📜 Prompt = the recipe card</b>The written instructions for the cook.<div class="eg">Here: 6 prompts, e.g. query-parser.</div></div>
+    <div class="mini" id="a_track"><b>🧭 Trace = order tracking</b>Every step of one order, with timings.<div class="eg">Each step inside = a span.</div></div>
+  </div>
+  <div class="mini" id="a_lf" style="margin-top:10px"><b>📖 Langfuse = recipe book + tracking screen</b>It stores every prompt, and shows every trace: what the AI was asked, what it answered, how long it took and what it cost.</div>`,
+  lines: [
+    { say: "Welcome! This video explains how your Place Discover app is watched and steered using one free tool called Langfuse. First, a simple question: what is observability?" },
+    { say: "Observability means seeing what happens inside your app while it runs, without guessing. Think of a food delivery app that shows every stage of your order: placed, cooking, picked up, on the way.",
+      term: ["Observability", "Being able to see what is happening inside a running app, from the data it sends out about itself."] },
+    { say: "Your app has an A I helper inside it, called an L L M, short for large language model. It reads text and writes answers, like the cook in a kitchen.",
+      term: ["LLM", "Large language model: the AI that reads text and writes answers. Here it is gpt-oss-120b, running on Groq."] },
+    { say: "The written instructions you give the L L M are called a prompt. A prompt is like the recipe card you hand to the cook.",
+      term: ["Prompt", "The written instructions sent to the AI model, telling it what to do with the user's input."] },
+    { say: "When something goes wrong, you want to see each step an order went through. That record is called a trace, and each step inside it is called a span.",
+      term: ["Trace and span", "A trace is the full journey of one request. A span is one timed step inside it, such as one AI call."] },
+    { say: "Langfuse does two jobs. It keeps all your recipe cards, the prompts, in one place. And it shows you every trace, so you see what the A I was asked and what it answered." },
+  ],
+  async run(t) {
+    unfocus();
+    await seg(t, 0, async () => { hot("langfuse"); });
+    await seg(t, 1, async () => { cool("langfuse"); await go(t, "req", "req", { label: "your order", dur: 1500 }); await go(t, "fa_lg", "req", { dur: 600 }); });
+    await seg(t, 2, async () => { on("a_cook"); focus(["render", "clients", "c_groq", "x_groq"], ["clients_groq"]);
+      await go(t, "clients_groq", "ai", { label: "question", dur: 1100 }); hot("x_groq"); await go(t, "clients_groq", "ai", { label: "answer", reverse: true, dur: 1100 }); });
+    await seg(t, 3, async () => { on("a_cook", false); on("a_recipe"); focus(["langfuse", "lf_prompts", ...PROMPT_ROWS.map(r => r[0]), "render", "loader"], ["lf_loader"]);
+      await go(t, "lf_loader", "prompt", { label: "recipe card", dur: 1800 }); hot("loader"); });
+    await seg(t, 4, async () => { on("a_recipe", false); on("a_track"); focus(["render", "sdk", "exporter", "langfuse", "lf_ep", "lf_trace"], ["exp_lf", "ep_trace"]);
+      await go(t, "exp_lf", "span", { label: "trace", dur: 1800 }); await go(t, "ep_trace", "span", { dur: 500 }); hot("lf_trace"); });
+    await seg(t, 5, async () => { on("a_track", false); on("a_lf"); unfocus();
+      await all(t, packet("lf_loader", "prompt", { label: "prompts →", dur: 2000 }), packet("exp_lf", "span", { label: "← traces", dur: 2000 })); });
+  }
+},
+/* 2 ---------------------------------------------------------------- */
+{
+  title: "The big picture: your app and Langfuse",
+  body: `<p>There are only <b>two places</b>, both in the cloud:</p>
+  <ul><li><b>Your app on Render</b>: FastAPI + the LangGraph agent + a small prompt loader + the OpenTelemetry SDK.</li>
+  <li><b>Langfuse Cloud</b> (free Hobby plan): stores the prompts and receives the traces.</li></ul>
+  <p>The <code>prompts/</code> folder in your repo is only a <b>saved copy</b> for reading and git history. The app never reads it.</p>`,
+  panel: `<h3>Two directions</h3>
+  <div class="cards3">
+    <div class="mini" id="d1"><b style="color:var(--c4)">Langfuse → app</b>Prompts, loaded by <code>app/prompts.py</code>.</div>
+    <div class="mini" id="d2"><b style="color:var(--c2)">App → Langfuse</b>Traces, sent by <code>app/telemetry.py</code>.</div>
+    <div class="mini" id="d3"><b>prompts/ folder</b>Saved copy only. Synced with <code>scripts/sync_prompts.py</code>.</div>
+  </div>`,
+  lines: [
+    { say: "Here is the whole picture. There are two places, and both live in the cloud, so nothing extra has to run on your laptop." },
+    { say: "On the left is your app, running on Render. Render is a hosting service: it runs your Python code on its own computers.",
+      term: ["Render", "A cloud hosting service. Its free plan runs your web app on its servers."] },
+    { say: "On the right is Langfuse Cloud. Its free Hobby plan is enough for this project.",
+      term: ["Langfuse", "A tool for AI apps that stores your prompts and shows traces of every AI call, with cost and timing."] },
+    { say: "Data moves in two directions. Prompts travel from Langfuse into your app, shown in orange. Traces travel from your app back to Langfuse, shown in blue." },
+    { say: "On the far left, the prompts folder keeps a saved copy of every prompt, for reading and history. The app never reads that folder." },
+  ],
+  async run(t) {
+    await seg(t, 0, async () => unfocus());
+    await seg(t, 1, async () => { focus(["render", "browser", "fastapi", "langgraph", "clients", "loader", "sdk"], ["req"]); hot("render"); await go(t, "req", "req", { dur: 1300 }); });
+    await seg(t, 2, async () => { cool("render"); focus(["langfuse", "lf_ep", "lf_trace", "lf_sess", "lf_prompts", ...PROMPT_ROWS.map(r => r[0])]); hot("langfuse"); });
+    await seg(t, 3, async () => { cool("langfuse"); unfocus();
+      on("d1"); await go(t, "lf_loader", "prompt", { label: "prompts", dur: 1600 }); hot("loader");
+      on("d2"); await go(t, "exp_lf", "span", { label: "traces", dur: 1600 }); hot("lf_ep"); });
+    await seg(t, 4, async () => { on("d1", false); on("d2", false); on("d3"); focus(["folder", "langfuse", "lf_prompts", "render", "loader"], []); hot("folder");
+      await w(1200, t); renderStatus.textContent = "never reads prompts/"; });
+  }
+},
+/* 3 ---------------------------------------------------------------- */
+{
+  title: "Every prompt lives in Langfuse",
+  body: `<p>The app has <b>6 prompts</b>, and none of them is written in the Python code. They live in <b>Langfuse → Prompts</b>.</p>
+  <ul><li><b>Version</b>: every saved change becomes v1, v2, v3… and old versions are kept.</li>
+  <li><b>Label</b>: a name tag on one version. The app always loads the version labelled <code>production</code>.</li>
+  <li><b>Variables</b>: <code>{{query}}</code> marks a blank that the app fills in for each request.</li></ul>
+  <span class="codefile">app/prompts.py</span><span class="codefile">prompts/*.yaml</span>`,
+  panel: `<h3>The 6 prompts</h3>
+  <table>
+    <tr><th>prompt</th><th>used by</th></tr>
+    <tr><td class="mono">query-parser</td><td>sentence → city, area, place type</td></tr>
+    <tr><td class="mono">display-decision</td><td>rank_places: list or one winner?</td></tr>
+    <tr><td class="mono">pick-winner</td><td>pick_winner: best place from reviews</td></tr>
+    <tr><td class="mono">review-extractor</td><td>fetch_reviews: find real reviews</td></tr>
+    <tr><td class="mono">negotiation-judge</td><td>deal, refused, or keep going?</td></tr>
+    <tr><td class="mono">negotiation-drafter</td><td>write the next SMS</td></tr>
+  </table>
+  <h3 style="margin-top:14px">query-parser · <span class="status ok" id="verChip">v1 · production</span></h3>
+<pre>You are a query parser for a place discovery app.
+
+User query: "<span class="hl" id="varQ">{{query}}</span>"
+
+Extract the city, area, place_type and intent.</pre>`,
+  lines: [
+    { say: "Your app uses six prompts. For example, the query parser turns your sentence into a city and a place type. None of them is written inside the Python code any more." },
+    { say: "They live on the Prompts page of Langfuse. This is called prompt management: one place to read, edit and track every prompt.",
+      term: ["Prompt management", "Keeping all prompts in one tool where you can read, edit, version and roll them back, outside the code."] },
+    { say: "Every time you save a change, Langfuse keeps it as a new version: version one, version two, and so on. Old versions are never lost.",
+      term: ["Version", "A saved state of a prompt. Each edit creates a new numbered version; older ones stay available."] },
+    { say: "A label is a name tag on one version. Your app always asks for the version tagged production.",
+      term: ["Label", "A name tag on one prompt version, like production. Moving the tag changes which version the app uses."] },
+    { say: "Inside a prompt, double curly brackets mark a variable. A variable is a blank that the app fills in each time, like the user's question.",
+      term: ["Variable", "A blank inside a prompt, written with double curly brackets, that the app fills in for each request."] },
+    { say: "So a prompt is like a fill in the blanks recipe card. Langfuse stores the card, and the app writes in the details for each customer." },
+  ],
+  async run(t) {
+    focus(["langfuse", "lf_prompts", ...PROMPT_ROWS.map(r => r[0])]);
+    await seg(t, 0, async () => { for (const [id] of PROMPT_ROWS) { hot(id); await w(450, t); cool(id); } });
+    await seg(t, 1, async () => { hot("lf_prompts"); });
+    await seg(t, 2, async () => { cool("lf_prompts"); hot("p_qp"); verTxt.textContent = "query-parser: v1 → v2 → v3 …"; });
+    await seg(t, 3, async () => { on("verChip"); verTxt.textContent = "label production → v1"; hot("p_qp"); });
+    await seg(t, 4, async () => { const v = $("varQ"); await w(800, t); await typeInto(v, "cheap biryani in Hyderabad", t, 45); });
+    await seg(t, 5, async () => { focus(["langfuse", "lf_prompts", "p_qp", "render", "loader"], ["lf_loader"]); await go(t, "lf_loader", "prompt", { label: "query-parser v1", dur: 2000 }); hot("loader"); });
+  }
+},
+/* 4 ---------------------------------------------------------------- */
+{
+  title: "Startup: load the prompts, switch on tracing",
+  body: `<p>When the server starts, two things happen once:</p>
+  <ul><li><code>check_prompts()</code> loads all 6 prompts from Langfuse and logs clearly if one is missing.</li>
+  <li><code>setup_telemetry(app)</code> switches on tracing: it creates the OpenTelemetry provider and the instrumentors.</li></ul>
+  <p>Each prompt is kept in memory for 60 seconds (a cache), so most AI calls do not ask Langfuse again.</p>
+  <span class="codefile">app/main.py · lifespan</span><span class="codefile">app/prompts.py</span><span class="codefile">app/telemetry.py</span>`,
+  panel: `<h3>Startup, step by step</h3>
+  <ol class="steps">
+    <li><code>check_prompts()</code>: download all 6 prompts (label production)</li>
+    <li>Keep each one in memory for 60 s (cache)</li>
+    <li>Missing prompt? A clear error in the log</li>
+    <li><code>setup_telemetry(app)</code>: switch on tracing</li>
+    <li>OpenTelemetry SDK + exporter to Langfuse</li>
+    <li>Instrumentors wrap FastAPI, requests and LangChain</li>
+  </ol>
+<pre>INFO app.telemetry: Tracing is on: sending to Langfuse
+INFO app.prompts: Loaded 6 prompts from Langfuse (label 'production')</pre>`,
+  lines: [
+    { say: "When your app starts, two things happen once. First, it checks that all six prompts exist in Langfuse." },
+    { say: "The prompt loader downloads each prompt and keeps a copy in memory for sixty seconds. Keeping a nearby copy like this is called a cache.",
+      term: ["Cache", "A copy kept close by, so the app does not have to download the same thing again every time."] },
+    { say: "If a prompt is missing, the app says so clearly in its log, so you know exactly what to fix." },
+    { say: "Second, the setup telemetry function switches on tracing. Telemetry means measurements an app sends out about itself.",
+      term: ["Telemetry", "Measurements an app sends out about itself, such as traces of each request."] },
+    { say: "It uses OpenTelemetry, a free and open standard, through a Python library called an S D K, or software development kit.",
+      term: ["OpenTelemetry and SDK", "OpenTelemetry is the open standard for traces. The SDK is the Python library that produces them inside your app."] },
+    { say: "Instrumentors are small helpers that wrap the libraries you already use, so every web request, agent step and A I call is recorded automatically.",
+      term: ["Instrumentor", "A helper that wraps an existing library and records a span every time that library is used."] },
+  ],
+  async run(t) {
+    focus(["render", "loader", "langfuse", "lf_prompts", ...PROMPT_ROWS.map(r => r[0])], ["lf_loader"]);
+    await seg(t, 0, async () => { stepOn(0);
+      for (let i = 0; i < 6; i++) { hot(PROMPT_ROWS[i][0]); packet("lf_loader", "prompt", { dur: 900 }); await w(280, t); }
+      await w(700, t); hot("loader"); });
+    await seg(t, 1, async () => { stepOn(1); renderStatus.textContent = "6 prompts cached · 60 s"; });
+    await seg(t, 2, async () => { stepOn(2); });
+    await seg(t, 3, async () => { stepOn(3); focus(["render", "sdk", "i_fa", "i_req", "i_lc", "tagger", "buf", "exporter"]); hot("sdk"); });
+    await seg(t, 4, async () => { stepOn(4); hot("tagger", "buf", "exporter"); });
+    await seg(t, 5, async () => { stepOn(5); cool("tagger", "buf", "exporter");
+      focus(["render", "sdk", "i_fa", "i_req", "i_lc", "fastapi", "langgraph", "clients"]);
+      for (const [id, other] of [["i_fa", "fastapi"], ["i_lc", "langgraph"], ["i_req", "clients"]]) { hot(id, other); await w(900, t); cool(id, other); } });
+  }
+},
+/* 5 ---------------------------------------------------------------- */
+{
+  title: "A search gets a session id and a trace",
+  body: `<p>The page creates one <b>session id</b> per browser tab (shown top-right, click to copy) and sends it with every request in the <code>X-Session-Id</code> header.</p>
+  <p><b>FastAPIInstrumentor</b> opens the first span of a new <b>trace</b>. The <b>tagger</b> (<code>_AppSpanProcessor</code>) writes <code>langfuse.session.id</code> on every span, so Langfuse groups all traces of one visit under <b>Sessions</b>.</p>
+  <span class="codefile">frontend/app.js · SESSION_ID</span><span class="codefile">app/telemetry.py · SessionIdMiddleware</span>`,
+  panel: `<h3>Top-right of the app</h3>
+  <div class="url mono">🧭 SESSION ID · click to copy<br><b id="sidTxt"></b></div>
+  <h3>Trace waterfall</h3>
+  <div class="tid mono dt" id="tid">trace id: …</div>
+  <div class="wf" id="wf"></div>`,
+  lines: [
+    { say: "Now you open the page. Your browser creates a session I D, a random name for this visit, and shows it in the top right corner.",
+      term: ["Session ID", "A random name for one visit (one browser tab). Every request of that visit carries it."] },
+    { say: "You type a search, like cheap biryani in Hyderabad. The browser sends a web request to the app, with the session I D attached.",
+      term: ["Web request", "A message from your browser to the app, asking it to do something, like start a search."] },
+    { say: "The FastAPI instrumentor opens the first span of a new trace. The trace gets a trace I D, a tracking number for this one request.",
+      term: ["Trace ID", "A random tracking number shared by every span of one request."] },
+    { say: "Then our tagger stamps the session I D onto every span in this trace. That is how Langfuse later groups all searches from one visit together.",
+      term: ["Tagger", "A small helper in this app that writes the session ID, and the prompt version, onto each span."] },
+    { say: "Each new search in the same browser tab gets its own trace, but the same session I D. A new tab starts a new session." },
+  ],
+  async run(t) {
+    focus(["browser", "render", "fastapi", "sdk", "i_fa", "tagger"], ["req", "fa_instr", "instr_tag"]);
+    await seg(t, 0, async () => { hot("browser"); await typeInto($("sidTxt"), SID, t, 35); });
+    await seg(t, 1, async () => { await go(t, "req", "req", { label: "search + session id", dur: 1800 }); hot("fastapi"); });
+    await seg(t, 2, async () => { await go(t, "fa_instr", "span", { label: "first span", dur: 1100 }); hot("i_fa");
+      wfRow("POST /agent/start", 0, 0, 100, "1.9 s", "span"); await typeInto($("tid"), "trace id: " + rid(16), t, 22); });
+    await seg(t, 3, async () => { await go(t, "instr_tag", "session", { label: "+ session id", dur: 1000 }); hot("tagger");
+      wfRow("ChatGroq · query-parser v1", 1, 3, 50, "0.95 s", "ai"); wfRow("GET serpstack.com", 1, 56, 40, "0.76 s", "span"); });
+    await seg(t, 4, async () => { await go(t, "req", "req", { label: "next search", dur: 1300 }); await go(t, "instr_tag", "session", { label: "same session", dur: 900 }); });
+  }
+},
+/* 6 ---------------------------------------------------------------- */
+{
+  title: "The agent runs: every AI call uses a Langfuse prompt",
+  body: `<p>Each AI call goes through <code>ainvoke_prompt(llm, "prompt-name", **values)</code>: load the prompt (from the 60 s cache or Langfuse), fill in the variables, call Groq.</p>
+  <p>While the call runs, the tagger writes <code>langfuse.observation.prompt.name</code> and <code>.version</code> on its spans, so in Langfuse every AI answer is <b>linked to the exact prompt version</b> that produced it.</p>
+  <span class="codefile">app/agent/search_nodes.py</span><span class="codefile">app/tools/reviews.py</span>`,
+  panel: `<h3>Trace waterfall · GET /agent/stream</h3>
+  <div class="wf" id="wf"></div>`,
+  lines: [
+    { say: "Next, the agent runs. The agent is a flowchart built with LangGraph, and each step in it is called a node.",
+      term: ["LangGraph node", "One step (one Python function) in the agent's flowchart, such as rank places."] },
+    { say: "Before the agent starts, the app fills the query parser prompt with your sentence and asks the A I model on Groq. Groq is the cloud service that runs the model.",
+      term: ["Groq", "A cloud service that runs AI models very fast. Your app sends it prompts and gets answers back."] },
+    { say: "The rank places node uses the display decision prompt, to choose between showing a full list or one winner." },
+    { say: "The fetch reviews node downloads reviews for three places at the same time, and the review extractor prompt picks the real reviews out of each page." },
+    { say: "Finally, the pick winner node fills the pick winner prompt with all the reviews, and asks the A I for the best place." },
+    { say: "Every A I call is linked to the exact prompt name and version it used. Later you can compare answers from version one and version two." },
+  ],
+  async run(t) {
+    const base = ["render", "fastapi", "langgraph", "loader", "clients", "c_groq", "x_groq", "langfuse", "lf_prompts"];
+    const aiCall = async (from, label) => {
+      await go(t, from, "prompt", { label, dur: 800 });
+      await go(t, "lg_clients", "req", { dur: 400 });
+      await go(t, "clients_groq", "ai", { dur: 700 }); hot("x_groq");
+      await go(t, "clients_groq", "ai", { reverse: true, dur: 600 });
+    };
+    focus(base, ["fa_lg", "loader_lg", "loader_fa", "lg_clients", "clients_groq", "fa_clients"]);
+    await seg(t, 0, async () => { hot("langgraph"); wfRow("GET /agent/stream", 0, 0, 100, "6.4 s", "span"); wfRow("LangGraph", 1, 1, 98, "6.3 s", "span");
+      for (const id of ["n_rank", "n_fetch", "n_pick"]) { hot(id); await w(500, t); cool(id); } });
+    await seg(t, 1, async () => { hot("p_qp"); await go(t, "loader_fa", "prompt", { label: "query-parser", dur: 800 });
+      await go(t, "fa_clients", "req", { dur: 900 }); await go(t, "clients_groq", "ai", { dur: 700 }); hot("x_groq"); await go(t, "clients_groq", "ai", { reverse: true, dur: 600 }); });
+    await seg(t, 2, async () => { hot("n_rank", "p_dd"); wfRow("rank_places", 2, 2, 25, "1.5 s", "span"); await aiCall("loader_lg", "display-decision");
+      wfRow("ChatGroq · display-decision v1", 3, 3, 22, "1.3 s", "ai"); cool("n_rank"); });
+    await seg(t, 3, async () => { hot("n_fetch", "p_re"); focus([...base, "n_fetch", "x_webscr"], ["lg_clients", "clients_webscr", "loader_lg"]);
+      wfRow("fetch_reviews", 2, 28, 31, "2.0 s", "span");
+      await all(t, packet("clients_webscr", "req", { label: "×3 at once", dur: 1000 }), wait(200).then(() => packet("clients_webscr", "req", { dur: 1000 })), wait(400).then(() => packet("clients_webscr", "req", { dur: 1000 })));
+      await go(t, "loader_lg", "prompt", { label: "review-extractor", dur: 800 });
+      wfRow("ChatGroq · review-extractor v1 ×3", 3, 40, 18, "1.1 s", "ai"); cool("n_fetch"); });
+    await seg(t, 4, async () => { focus(base, ["loader_lg", "lg_clients", "clients_groq"]); hot("n_pick", "p_pw"); wfRow("pick_winner", 2, 60, 38, "2.4 s", "span");
+      await aiCall("loader_lg", "pick-winner"); wfRow("ChatGroq · pick-winner v1", 3, 61, 35, "2.2 s", "ai"); cool("n_pick"); });
+    await seg(t, 5, async () => { focus(["render", "sdk", "tagger", "i_lc", "clients", "c_groq"], ["llm_instr", "instr_tag"]);
+      await go(t, "llm_instr", "ai", { dur: 900 }); await go(t, "instr_tag", "prompt", { label: "pick-winner · v1", dur: 1100 }); hot("tagger"); });
+  }
+},
+/* 7 ---------------------------------------------------------------- */
+{
+  title: "Secrets are hidden before anything leaves the app",
+  body: `<p>SerpStack and WebScraping.AI take the API key <b>in the web address</b>, and the SMS library puts the phone number and the message there too.</p>
+  <p>A <b>hook</b> on RequestsInstrumentor rewrites the recorded address, replacing <code>access_key</code>, <code>api_key</code>, <code>apikey</code>, <code>recipients</code> and <code>message</code> with <code>REDACTED</code>.</p>
+  <p>Prompts and AI answers are still stored in Langfuse, including the SMS negotiation text, because that is the point of AI tracing.</p>
+  <span class="codefile">app/telemetry.py · _redact_request_hook</span>`,
+  panel: `<h3>Same call, two views</h3>
+  <div class="dt">What the app actually sends to SerpStack:</div>
+  <div class="url mono">http://api.serpstack.com/search?<b style="color:var(--bad)">access_key=3f9c2a71demo0key</b>&amp;query=biryani+in+hyderabad</div>
+  <div class="dt">What is stored on the span in Langfuse:</div>
+  <div class="url mono">http://api.serpstack.com/search?<b id="redk" style="color:var(--bad)">access_key=3f9c2a71demo0key</b>&amp;query=biryani+in+hyderabad</div>`,
+  lines: [
+    { say: "SerpStack, the search service, expects your secret A P I key inside the web address. An A P I key is a password that lets your app use a service.",
+      term: ["API key", "A secret password that lets your app use an outside service, like SerpStack."] },
+    { say: "The requests instrumentor normally saves that full web address on the span. Without protection, your key would be stored in Langfuse." },
+    { say: "So a hook, a small function that runs at the moment the span is created, replaces the secret with the word redacted, which means blacked out.",
+      term: ["Hook and redaction", "A hook is your own small function that a library calls at a set moment. Redaction means blacking out secrets."] },
+    { say: "The same rule hides the shop's phone number and the SMS text inside web addresses. Prompts and answers, including the negotiation messages, are still stored in Langfuse." },
+  ],
+  async run(t) {
+    focus(["render", "clients", "c_req", "x_serp", "sdk", "i_req"], ["clients_serp", "req_instr"]);
+    await seg(t, 0, async () => { await go(t, "clients_serp", "req", { label: "?access_key=3f9c…", dur: 1700 }); hot("x_serp"); });
+    await seg(t, 1, async () => { await go(t, "req_instr", "span", { label: "span: full address", dur: 1700 }); hot("i_req"); });
+    await seg(t, 2, async () => { const k = $("redk"), key = "3f9c2a71demo0key";
+      for (let i = key.length; i >= 0; i--) { k.textContent = "access_key=" + key.slice(0, i); await w(55, t); }
+      await typeInto(k, "access_key=REDACTED", t, 55); k.style.color = "var(--ok)"; });
+    await seg(t, 3, async () => { focus(["render", "clients", "c_sms", "x_sms", "sdk", "i_req"], ["clients_sms"]); await go(t, "clients_sms", "req", { label: "recipients · message → REDACTED", dur: 1800 }); });
+  }
+},
+/* 8 ---------------------------------------------------------------- */
+{
+  title: "Spans wait in a buffer, then ship to Langfuse",
+  body: `<p>Finished spans go into an in-memory <b>buffer</b> (<code>BatchSpanProcessor</code>). About every 5 seconds, or when many are waiting, they are sent together as one <b>batch</b>.</p>
+  <p>The <b>OTLP exporter</b> sends the batch to <code>&lt;LANGFUSE_HOST&gt;/api/public/otel/v1/traces</code>, logging in with your public and secret key. Langfuse stores the spans as traces, grouped into sessions.</p>
+  <p>All of this runs in the background: users never wait for Langfuse, and if Langfuse is down the app keeps working.</p>`,
+  panel: `<h3>From span to Langfuse</h3>
+  <div class="tl">
+    <div><b>1 · span ends</b>joins the buffer</div>
+    <div><b>2 · ~5 s or full</b>batch is ready</div>
+    <div><b>3 · OTLP</b>one secure web request</div>
+    <div><b>4 · Langfuse</b>traces + sessions</div>
+  </div>
+<pre>POST https://us.cloud.langfuse.com/api/public/otel/v1/traces
+Authorization: Basic &lt;public key : secret key&gt;
+Content-Type: application/x-protobuf</pre>`,
+  lines: [
+    { say: "Finished spans are not sent one by one. They wait in a buffer, which is a small waiting area in the app's memory.",
+      term: ["Buffer", "A small temporary waiting area in memory, where data sits for a few seconds before it is sent."] },
+    { say: "About every five seconds, or when many spans are waiting, they are sent in one go. Sending many items together like this is called a batch.",
+      term: ["Batch", "Many items sent together in one go, instead of one by one."] },
+    { say: "The exporter sends the batch using O T L P, the OpenTelemetry protocol. A protocol is an agreed message format that both sides understand.",
+      term: ["OTLP and protocol", "A protocol is an agreed message format. OTLP is OpenTelemetry's standard format for sending traces."] },
+    { say: "Langfuse checks your public and secret keys, then stores the spans as traces, grouped into sessions." },
+    { say: "This all happens in the background, so your users never wait for Langfuse. And if Langfuse is down, the app keeps working." },
+  ],
+  async run(t) {
+    focus(["render", "sdk", "tagger", "buf", "exporter", "langfuse", "lf_ep", "lf_trace", "lf_sess"], ["tag_buf", "buf_exp", "exp_lf", "ep_trace", "trace_sess"]);
+    await seg(t, 0, async () => { stepOn(0); for (let i = 1; i <= 5; i++) { await go(t, "tag_buf", "span", { dur: 450 }); fill("buf", i); } });
+    await seg(t, 1, async () => { stepOn(1); for (let i = 6; i <= 8; i++) { await go(t, "tag_buf", "span", { dur: 400 }); fill("buf", i); } hot("buf"); await w(500, t); fill("buf", 0);
+      await go(t, "buf_exp", "span", { big: true, dur: 600 }); hot("exporter"); });
+    await seg(t, 2, async () => { stepOn(2); await go(t, "exp_lf", "span", { big: true, label: "OTLP batch", dur: 2200 }); hot("lf_ep"); });
+    await seg(t, 3, async () => { stepOn(3); await go(t, "ep_trace", "span", { dur: 600 }); hot("lf_trace"); tr[0].textContent = "POST /agent/start · 1.9 s";
+      await go(t, "trace_sess", "session", { dur: 600 }); hot("lf_sess"); ss[0].textContent = "session 3f2b8c1e… · 1 trace"; });
+    await seg(t, 4, async () => { focus(["render", "browser", "fastapi"], ["req"]); await go(t, "req", "req", { label: "users keep going", dur: 1500 }); });
+  }
+},
+/* 9 ---------------------------------------------------------------- */
+{
+  title: "What you see in Langfuse",
+  body: `<p><b>Tracing</b>: one row per trace (request). Click it for the tree of spans. A <b>generation</b> is an AI call: input prompt, output answer, model, tokens, cost, and the linked prompt version.</p>
+  <p><b>Sessions</b>: paste the session id from the app's top-right corner to see every trace of that visit, in order.</p>
+  <p><b>Prompts</b>: each prompt shows its versions, labels, and which generations used each version.</p>`,
+  panel: `<h3>A trace in Langfuse (sample)</h3>
+  <div class="logs mono" id="tree"></div>
+  <div class="mini" id="gen" style="margin-top:10px;opacity:.25"><b style="color:var(--c3)">GENERATION · ChatGroq</b>
+    model openai/gpt-oss-120b · prompt <b>pick-winner v1</b><br>input: system + user messages (with the reviews)<br>output: { winner_name: "…", explanation: "…" }<br>tokens 1 640 · cost $0.0004 · 2.2 s</div>`,
+  lines: [
+    { say: "Open Langfuse and go to Tracing. Each row is one trace, which means one request from your app." },
+    { say: "Click a trace to see its tree of spans. A purple generation is an A I call, showing the prompt that went in and the answer that came out.",
+      term: ["Generation", "Langfuse's name for one AI call: the prompt sent, the answer received, the model, tokens and cost."] },
+    { say: "It also shows tokens. Tokens are small pieces of words. A I providers count usage and cost in tokens, so Langfuse adds them up for you.",
+      term: ["Token", "A small piece of a word. AI services measure usage and price in tokens."] },
+    { say: "Go to Sessions and paste the session I D from the top right corner of the app. You will see every trace from that visit, in order." },
+    { say: "Go to Prompts and open any prompt. Langfuse shows which A I calls used each version, so you can compare how a change affected the answers." },
+  ],
+  async run(t) {
+    focus(["langfuse", "lf_trace", "lf_sess", "lf_prompts", ...PROMPT_ROWS.map(r => r[0])]);
+    const add = s => { const d = document.createElement("div"); d.textContent = s; $("tree").appendChild(d); };
+    await seg(t, 0, async () => { hot("lf_trace"); tr[0].textContent = "GET /agent/stream · 6.4 s"; await w(500, t); tr[1].textContent = "POST /agent/start · 1.9 s"; });
+    await seg(t, 1, async () => { for (const s of ["GET /agent/stream", "└ LangGraph", "   ├ rank_places → ChatGroq (display-decision v1)", "   ├ fetch_reviews → 3× web + ChatGroq", "   └ pick_winner → ChatGroq (pick-winner v1)"]) { add(s); await w(600, t); }
+      $("gen").style.opacity = 1; });
+    await seg(t, 2, async () => { on("gen"); });
+    await seg(t, 3, async () => { cool("lf_trace"); hot("lf_sess"); ss[0].textContent = "session 3f2b8c1e…"; await w(600, t); ss[1].textContent = "→ POST /agent/start, GET /agent/stream"; });
+    await seg(t, 4, async () => { cool("lf_sess"); hot("lf_prompts", "p_pw"); verTxt.textContent = "pick-winner v1 · used by 12 generations"; });
+  }
+},
+/* 10 --------------------------------------------------------------- */
+{
+  title: "Changing a prompt, with no redeploy",
+  body: `<p>To change how the agent behaves, edit the prompt in <b>Langfuse → Prompts</b>, save it as a new version, and give it the <code>production</code> label. The app uses it within about 60 seconds, when its cached copy expires.</p>
+  <p>To undo, move the <code>production</code> label back to the old version.</p>
+  <p>Then refresh the saved copies and commit them:</p>
+<pre>python scripts/sync_prompts.py pull
+git add prompts/ &amp;&amp; git commit -m "Update negotiation-drafter prompt"</pre>`,
+  panel: `<h3>Editing negotiation-drafter</h3>
+  <div class="tl">
+    <div><b>1 · edit</b>in Langfuse</div>
+    <div><b>2 · save v2</b>new version</div>
+    <div><b>3 · label</b>production → v2</div>
+    <div><b>4 · ≤ 60 s</b>app uses v2</div>
+    <div><b>5 · pull</b>saved copy + git</div>
+  </div>`,
+  lines: [
+    { say: "Want the agent to write friendlier messages to shops? Open the negotiation drafter prompt in Langfuse, and edit the text." },
+    { say: "Save it as a new version, and give it the production label. Your app picks it up within about sixty seconds, when its cached copy expires." },
+    { say: "There is no redeploy. A redeploy means rebuilding and restarting the app on Render, which takes minutes.",
+      term: ["Redeploy", "Rebuilding and restarting the app on the hosting service so code changes go live. Slow, so prompts avoid it."] },
+    { say: "If the new version turns out worse, move the production label back to version one. That is your undo button." },
+    { say: "Finally, run the sync prompts script with pull, to refresh the saved copies in the prompts folder. Then commit them to git, so the history is kept.",
+      term: ["Git", "A tool that keeps the full history of every change to your project's files."] },
+  ],
+  async run(t) {
+    focus(["langfuse", "lf_prompts", "p_nd", "render", "loader", "langgraph", "n_draft"], ["lf_loader"]);
+    await seg(t, 0, async () => { stepOn(0); hot("p_nd"); verTxt.textContent = "negotiation-drafter v1 · editing…"; });
+    await seg(t, 1, async () => { stepOn(1); verTxt.textContent = "negotiation-drafter: v2 saved"; await w(1200, t); stepOn(2); verTxt.textContent = "label production → v2";
+      await w(1200, t); stepOn(3); await go(t, "lf_loader", "prompt", { label: "negotiation-drafter v2", dur: 2000 }); hot("loader", "n_draft"); });
+    await seg(t, 2, async () => { renderStatus.textContent = "no redeploy needed"; hot("render"); });
+    await seg(t, 3, async () => { cool("render"); verTxt.textContent = "label production → v1 (undo)"; await go(t, "lf_loader", "prompt", { label: "back to v1", dur: 1600 }); });
+    await seg(t, 4, async () => { stepOn(4); focus(["folder", "langfuse", "lf_prompts", "p_nd"]); hot("folder"); verTxt.textContent = "pull → prompts/negotiation-drafter.yaml"; });
+  }
+},
+/* 11 --------------------------------------------------------------- */
+{
+  title: "Render goes to sleep: flush before exit",
+  body: `<p>On Render's free plan, an idle app is stopped after about 15 minutes. At that moment the buffer may still hold spans.</p>
+  <p>On shutdown, <code>shutdown_telemetry()</code> calls the provider's <code>shutdown()</code>, which <b>flushes</b> the buffer first, so the last traces still reach Langfuse.</p>
+  <span class="codefile">app/main.py · lifespan</span><span class="codefile">app/telemetry.py · shutdown_telemetry</span>`,
+  panel: `<h3>Shutdown sequence</h3>
+  <div class="tl">
+    <div><b>1 · idle</b>~15 min, no visitors</div>
+    <div><b>2 · stop signal</b>from Render</div>
+    <div><b>3 · flush</b>buffer → Langfuse</div>
+    <div><b>4 · sleep</b>💤 nothing lost</div>
+  </div>`,
+  lines: [
+    { say: "On Render's free plan, your app goes to sleep after about fifteen minutes without visitors." },
+    { say: "Before it sleeps, Render sends the app a stop signal. At that moment, the buffer may still hold spans that were never sent." },
+    { say: "So on shutdown, the app flushes the buffer. To flush means to send everything still waiting, right now.",
+      term: ["Flush", "Immediately sending out everything still waiting in a buffer."] },
+    { say: "Then it sleeps, and nothing is lost. The next visitor wakes it up, and the prompts are loaded again." },
+  ],
+  async run(t) {
+    focus(["render", "sdk", "buf", "exporter", "langfuse", "lf_ep"], ["buf_exp", "exp_lf"]);
+    fill("buf", 5);
+    await seg(t, 0, async () => { stepOn(0); renderStatus.textContent = "idle…"; });
+    await seg(t, 1, async () => { stepOn(1); renderStatus.textContent = "⚠ stop signal"; hot("render", "buf"); });
+    await seg(t, 2, async () => { stepOn(2); fill("buf", 0); await go(t, "buf_exp", "span", { big: true, dur: 500 }); await go(t, "exp_lf", "span", { big: true, label: "last 5 spans", dur: 1800 }); hot("lf_ep"); });
+    await seg(t, 3, async () => { stepOn(3); cool("render", "buf"); $("render").classList.add("sleep"); renderStatus.textContent = "💤 sleeping"; });
+  }
+},
+/* 12 --------------------------------------------------------------- */
+{
+  title: "Your laptop, and the recap",
+  body: `<p>On your laptop you can set <code>LANGFUSE_TRACING=false</code> in <code>.env</code>: no traces are sent, which keeps it light. Prompts still load from Langfuse, so the Langfuse keys are always required.</p>
+  <p>On Render, tracing is on (the default), and <code>LANGFUSE_HOST</code> must match your project's region.</p>`,
+  panel: `<h3>Phase 1 with Langfuse, in five lines</h3>
+  <ol class="steps">
+    <li>Every prompt lives in <b>Langfuse</b>; the app loads the <b>production</b> version</li>
+    <li>Each browser tab has a <b>session id</b>, carried by every span</li>
+    <li>Instrumentors record each request, agent step and AI call, <b>linked to its prompt version</b></li>
+    <li>Spans wait in a <b>buffer</b> and are sent to Langfuse every few seconds</li>
+    <li>In Langfuse you read <b>traces, sessions and prompts</b>, and change prompts with no redeploy</li>
+  </ol>`,
+  lines: [
+    { say: "On your laptop, you can set Langfuse tracing to false. Then no traces are sent, which keeps your laptop light." },
+    { say: "Prompts still load from Langfuse, because that is the only place they live. So the Langfuse keys are always needed." },
+    { say: "Let's recap. One: every prompt lives in Langfuse, and the app loads the version labelled production." },
+    { say: "Two: each browser tab has a session I D, and every span carries it." },
+    { say: "Three: instrumentors record each request, agent step and A I call, linked to its prompt version." },
+    { say: "Four: spans wait in a buffer, and are sent to Langfuse every few seconds." },
+    { say: "Five: in Langfuse you read traces, sessions and prompts, and you can change a prompt without a redeploy. Thanks for watching!" },
+  ],
+  async run(t) {
+    const sdkParts = ["sdk", "i_fa", "i_req", "i_lc", "tagger", "buf", "exporter"];
+    laptop.style.display = "";
+    focus(["laptop", "browser", "render", "fastapi", "loader", ...sdkParts, "langfuse", "lf_prompts"], ["laptop_browser", "lf_loader"]);
+    await seg(t, 0, async () => { hot("laptop"); await go(t, "laptop_browser", "req", { label: "localhost:8000", dur: 1200 }); sdkParts.forEach(id => $(id).classList.add("off")); });
+    await seg(t, 1, async () => { await go(t, "lf_loader", "prompt", { label: "prompts still load", dur: 2000 }); hot("loader"); });
+    await seg(t, 2, async () => { sdkParts.forEach(id => $(id).classList.remove("off")); laptop.style.display = "none"; unfocus(); stepOn(0);
+      await go(t, "lf_loader", "prompt", { label: "production", dur: 1600 }); });
+    await seg(t, 3, async () => { stepOn(1); await go(t, "req", "session", { label: "session id", dur: 1400 }); });
+    await seg(t, 4, async () => { stepOn(2); await all(t, packet("fa_instr", "span", { dur: 800 }), packet("lg_instr", "span", { dur: 800 }), packet("llm_instr", "ai", { dur: 900 })); await go(t, "instr_tag", "prompt", { dur: 600 }); });
+    await seg(t, 5, async () => { stepOn(3); fill("buf", 6); await w(800, t); fill("buf", 0); await go(t, "exp_lf", "span", { big: true, dur: 1600 }); });
+    await seg(t, 6, async () => { stepOn(4); hot("lf_trace", "lf_sess", "lf_prompts"); });
+  }
+},
+];
+
+/* #####################################################################
+   PLAYER: do not edit
+   ##################################################################### */
+COLORS = Object.fromEntries(LEGEND.map(([k, , c]) => [k, c]));
+$("legend").innerHTML = LEGEND.map(([, name, c]) => `<span style="--c:${c}">${name}</span>`).join("");
+const totalWords = SCENES.reduce((n, s) => n + s.lines.reduce((m, l) => m + l.say.split(/\s+/).length, 0), 0);
+$("hTitle").textContent = META.title; $("hSub").textContent = META.subtitle;
+$("oTitle").textContent = META.overlayTitle || META.title;
+$("oSub").textContent = `${SCENES.length} short chapters, about ${Math.max(1, Math.round(totalWords / 150))} min at 1×. Every technical word is explained as it comes up.`;
+
+// Dev check: every line spoken exactly once, in order
+(() => {
+  const problems = [];
+  SCENES.forEach((s, i) => {
+    const used = [...s.run.toString().matchAll(/seg\(t,\s*(\d+)/g)].map(m => +m[1]);
+    const want = s.lines.map((_, k) => k);
+    if (used.join() !== want.join()) problems.push(`Chapter ${i + 1}: seg indices [${used}] but lines are [${want}]`);
+    s.lines.forEach((l, k) => { if (/[_`{}<>]|\b[a-z]+[A-Z]\w*\(/.test(l.say)) problems.push(`Chapter ${i + 1} line ${k}: "say" contains code-like text (use plain spoken words)`); });
+  });
+  if (problems.length) { console.warn(problems.join("\n")); $("devwarn").style.display = "block"; $("devwarn").textContent = "⚠ Author check:\n" + problems.join("\n"); }
+})();
+
+let cur = 0;
+const bar = $("bar");
+SCENES.forEach((s, i) => {
+  const d = document.createElement("div");
+  d.className = "seg"; d.title = `${i + 1}. ${s.title}`; d.innerHTML = "<i></i>";
+  d.onclick = () => { hideOverlay(); runScene(i); };
+  bar.appendChild(d);
+});
+function updateBar() {
+  const n = SCENES[cur].lines.length;
+  const within = sceneDone ? 1 : Math.min(1, (segIdx + Math.min(1, (vt - segStart) / segEst)) / n);
+  [...bar.children].forEach((d, i) => { d.firstChild.style.width = ((i < cur ? 1 : i > cur ? 0 : within) * 100) + "%"; });
+}
+async function runScene(i) {
+  if (i < 0 || i >= SCENES.length) return;
+  tok++; const t = tok; cur = i; segIdx = 0; segStart = vt; sceneDone = false;
+  reset();
+  const s = SCENES[i];
+  $("sKicker").textContent = `Chapter ${i + 1} of ${SCENES.length}`;
+  $("sTitle").textContent = s.title; $("sBody").innerHTML = s.body; $("detail").innerHTML = s.panel;
+  $("clock").textContent = `${i + 1} / ${SCENES.length}`;
+  try {
+    await s.run(t);
+    sceneDone = true;
+    await w(1400, t);
+    if (i + 1 < SCENES.length) runScene(i + 1);
+    else { setPaused(true); $("capText").textContent = "The end. Click any chapter in the bar, or press ↺ to replay."; $("term").classList.remove("show"); }
+  } catch (e) { if (e !== CANCEL) console.error(e); }
+}
+function setPaused(p) {
+  paused = p;
+  document.body.classList.toggle("paused", p);
+  $("play").textContent = p ? "▶" : "⏸";
+  if (!synth || !curSpeech) return;
+  if (p) { curSpeech.stopped = true; curSpeech.u = null; synth.cancel(); setSpeaking(false); }
+  else if (!curSpeech.finished) { curSpeech.stopped = false; utter(curSpeech); }
+}
+function setVoice(v) {
+  voiceOn = v && !!synth;
+  $("voiceBtn").textContent = voiceOn ? "🔊" : "🔇";
+  $("spk").textContent = voiceOn ? "Narrator" : "Subtitles";
+  if (!voiceOn && curSpeech) { const sp = curSpeech; synth.cancel(); finishSpeech(sp); }
+}
+function hideOverlay() { if (!$("overlay").classList.contains("gone")) { $("overlay").classList.add("gone"); setPaused(false); } }
+function start(withVoice) { setVoice(withVoice); $("overlay").classList.add("gone"); setPaused(false); runScene(0); }
+$("startVoice").onclick = () => start(true);
+$("startSilent").onclick = () => start(false);
+$("play").onclick = () => {
+  if (!$("overlay").classList.contains("gone")) { start(voiceOn); return; }
+  if (paused && cur === SCENES.length - 1 && sceneDone) { setPaused(false); runScene(0); return; }
+  setPaused(!paused);
+};
+$("next").onclick = () => { hideOverlay(); runScene(Math.min(cur + 1, SCENES.length - 1)); };
+$("prev").onclick = () => { hideOverlay(); runScene(Math.max(cur - 1, 0)); };
+$("replay").onclick = () => { hideOverlay(); runScene(cur); };
+$("voiceBtn").onclick = () => setVoice(!voiceOn);
+$("speed").onchange = e => { speed = +e.target.value; };
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.code === "Space") { e.preventDefault(); $("play").click(); }
+  if (e.key === "ArrowRight") $("next").click();
+  if (e.key === "ArrowLeft") $("prev").click();
+  if (e.key === "r" || e.key === "R") $("replay").click();
+  if (e.key === "v" || e.key === "V") $("voiceBtn").click();
+});
+$("themeBtn").onclick = () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+};
+if (!synth) { $("startVoice").textContent = "Voice not supported in this browser"; $("startVoice").disabled = true; setVoice(false); }
+(() => { const s = SCENES[0]; $("sKicker").textContent = `Chapter 1 of ${SCENES.length}`; $("sTitle").textContent = s.title; $("sBody").innerHTML = s.body; $("detail").innerHTML = s.panel; $("clock").textContent = `1 / ${SCENES.length}`; reset(); })();
+requestAnimationFrame(t => { last = t; requestAnimationFrame(loop); });
+</script>
+</body>
+</html>

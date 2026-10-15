@@ -1,251 +1,71 @@
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
-from typing import Literal
-from app.agent.state import AgentState
-from app.agent.nodes import (
-    revisor_node,
-    simple_best_reviewed_node,
-    negotiation_path_node,
-    review_extraction_node,
-    analyze_reviews_node,
-    decide_path,
-    strategy_node,
-    human_review_node,
-    negotiation_manager_node
-)
-from app.config import settings
+"""
+The agent's flowchart, built with LangGraph.
 
-
-def create_negotiator_agent():
-    """
-    YOUR DESIGN: STEP 5 Revisor Node Implementation
-    
-    Workflow:
-    STEP 4 (SERPSTACK results ready) →
-    STEP 5 (Revisor Node - Gemini decides path) →
-        PATH A: Simple Best Reviewed (sort by rating/reviews) → END
-        PATH B: Negotiation Required (Tavily search + negotiation) → [Under construction]
-    Returns:
-        Compiled LangGraph application with MemorySaver persistence
-    """
-    
-    # Create StateGraph
-    workflow = StateGraph(AgentState)
-    
-    # ==========================================
-    # ADD NODES 
-    # ==========================================
-    
-    # STEP 5: Revisor Node - Gemini decides which path
-    workflow.add_node("revisor", revisor_node)
-    
-    # PATH A: Simple best reviewed analysis
-    workflow.add_node("simple_best_reviewed", simple_best_reviewed_node)
-    
-    # STEP 6: Review Extraction
-    workflow.add_node("review_extraction", review_extraction_node)
-    
-    # STEP 7: Analyze Reviews
-    workflow.add_node("analyze_reviews", analyze_reviews_node)
-    
-    # PATH B: Negotiation workflow (Real SMS - no simulation)
-    workflow.add_node("negotiation_path", negotiation_path_node)
-    workflow.add_node("strategy", strategy_node)
-    workflow.add_node("human_review", human_review_node)
-    workflow.add_node("negotiation_manager", negotiation_manager_node)
-    # Note: shop_simulation removed - we use real SMS
-    
-    # ==========================================
-    # SET ENTRY POINT
-    # ==========================================
-    
-    workflow.set_entry_point("revisor")
-    
-    # ==========================================
-    # ADD EDGES (YOUR DESIGN)
-    # ==========================================
-    
-    # Revisor → Conditional (PATH A or PATH B)
-    workflow.add_conditional_edges(
-        "revisor",
-        decide_path,
-        {
-            "path_a": "simple_best_reviewed",
-            "path_b": "negotiation_path"
-        }
-    )
-    
-    # PATH A: Simple Best Reviewed → Review Extraction
-    workflow.add_edge("simple_best_reviewed", "review_extraction")
-    
-    # Review Extraction → Analyze Reviews
-    workflow.add_edge("review_extraction", "analyze_reviews")
-    
-    # Analyze Reviews → END
-    workflow.add_edge("analyze_reviews", END)
-    
-    # PATH B: Negotiation Workflow Edges
-    # Flow: negotiation_path → negotiation_manager → strategy → human_review → negotiation_manager (loop)
-    
-    # Init -> Manager (to check history/status)
-    workflow.add_edge("negotiation_path", "negotiation_manager")
-    
-    # Strategy -> Human Review (HITL - pauses here for approval)
-    workflow.add_edge("strategy", "human_review")
-    
-    # Human Review -> Manager (after SMS sent, check for reply)
-    workflow.add_edge("human_review", "negotiation_manager")
-    
-    # Manager -> Conditional (Continue to next strategy or End)
-    def check_negotiation_status(state: AgentState) -> Literal["strategy", "end"]:
-        status = state.get("negotiation_status", "continue")
-        if status == "continue":
-            return "strategy"
-        return "end"
-        
-    workflow.add_conditional_edges(
-        "negotiation_manager",
-        check_negotiation_status,
-        {
-            "strategy": "strategy",
-            "end": END
-        }
-    )
-    
-    # ==========================================
-    # CONFIGURE PERSISTENCE (Memory)
-    # ==========================================
-    
-    # Use MemorySaver - All state persisted automatically
-    checkpointer = MemorySaver()
-    
-    # ==========================================
-    # COMPILE GRAPH
-    # ==========================================
-    
-    app = workflow.compile(
-        checkpointer=checkpointer,
-        interrupt_before=["human_review"] # PAUSE before human review node runs
-    )
-    
-    return app
-
-
-# ==========================================
-# GRAPH VISUALIZATION (Optional)
-# ==========================================
-
-def visualize_graph():
-    """
-    Returns ASCII representation of the agent workflow.
-    Useful for debugging and documentation.
-    """
-    return """
-    ┌─────────────────────────────────────────────────┐
-    │         NEGOTIATOR AGENT WORKFLOW               │
-    │         (Reflexion + HITL Pattern)              │
-    └─────────────────────────────────────────────────┘
-    
     START
-      ↓
-    ┌─────────────┐
-    │   Router    │  ← Classify intent (negotiation/info/comparison)
-    └──────┬──────┘
-           ↓
-    ┌─────────────┐
-    │ Fetch Data  │  ← Get Tavily reviews for top places
-    └──────┬──────┘
-           ↓
-    ┌─────────────┐
-    │Human Review │  ← 🔴 HITL: User approves/modifies data
-    │   (HITL)    │
-    └──────┬──────┘
-           ↓
-    ┌─────────────┐
-    │  Analyze    │  ← Initial analysis of all places
-    └──────┬──────┘
-           ↓
-         ┌─┴─┐
-         │ ? │  Needs negotiation?
-         └─┬─┘
-      ┌────┴────┐
-      │         │
-      NO       YES
-      │         ↓
-      │    ┌─────────────┐
-      │    │  Negotiate  │  ← Simulate shop contact
-      │    └──────┬──────┘
-      │           ↓
-      │         ┌─┴─┐
-      │         │ ? │  Need refinement?
-      │         └─┬─┘
-      │      ┌────┴────┐
-      │      │         │
-      │      NO       YES
-      │      │         ↓
-      │      │    ┌─────────────┐
-      │      │    │   Refine    │  ← Reflexion: Self-critique
-      │      │    └──────┬──────┘
-      │      │           │
-      └──────┴───────────┘
-             ↓
-    ┌─────────────┐
-    │ Recommend   │  ← Final ranked recommendations
-    └──────┬──────┘
-           ↓
-         END
-    
-    🔑 KEY FEATURES:
-    - Router: Determines workflow path
-    - HITL: Human validates data before processing
-    - Reflexion: Iterative improvement (max 3 loops)
-    - Memory: SQLite persistence across sessions
-    - Streaming: Real-time token output
-    """
+      │  choose_path()
+      ├── route == "search" ─────► rank_places
+      │                               │  after_ranking()
+      │                               ├── list wanted ──────────────► END
+      │                               └──► fetch_reviews ──► pick_winner ──► END
+      │
+      └── route == "negotiate" ──► check_negotiation
+                                      │  after_check()
+                                      ├── deal / rejected / waiting ─► END
+                                      └──► draft_message ──⏸──► send_sms ──► END
+                                                 (pause: human approves the SMS)
+
+Nodes live in search_nodes.py and negotiation_nodes.py.
+"""
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
+from app.agent.negotiation_nodes import after_check, check_negotiation_node, draft_message_node, send_sms_node
+from app.agent.search_nodes import after_ranking, fetch_reviews_node, pick_winner_node, rank_places_node
+from app.agent.state import AgentState
+from app.telemetry import session_id_var
 
 
-# ==========================================
-# HELPER FUNCTIONS
-# ==========================================
-
-def get_thread_config(thread_id: str) -> dict:
-    """
-    Generate config for thread-specific execution.
-    Required for memory persistence.
-    """
-    return {
-        "configurable": {
-            "thread_id": thread_id
-        },
-        "recursion_limit": settings.recursion_limit
-    }
+def choose_path(state: AgentState) -> str:
+    """Edge from START: the API sets route="negotiate" when the user clicks Negotiate."""
+    return state.get("route") or "search"
 
 
-async def stream_agent_response(app, input_state: dict, thread_id: str):
-    """
-    Stream agent execution with real-time updates.
-    
-    Args:
-        app: Compiled LangGraph application
-        input_state: Initial state dict
-        thread_id: Conversation thread ID
-    
-    Yields:
-        Dict with node updates and messages
-    """
-    config = get_thread_config(thread_id)
-    
-    async for event in app.astream(input_state, config):
-        # Each event is {node_name: output}
-        node_name = list(event.keys())[0]
-        node_output = event[node_name]
-        
-        yield {
-            "node": node_name,
-            "output": node_output,
-            "timestamp": None  # Can add timestamp if needed
-        }
+def build_agent():
+    graph = StateGraph(AgentState)
+
+    # 1. Register every node (a name + the function that runs)
+    graph.add_node("rank_places", rank_places_node)
+    graph.add_node("fetch_reviews", fetch_reviews_node)
+    graph.add_node("pick_winner", pick_winner_node)
+    graph.add_node("check_negotiation", check_negotiation_node)
+    graph.add_node("draft_message", draft_message_node)
+    graph.add_node("send_sms", send_sms_node)
+
+    # 2. Connect them. Conditional edges call a function that returns a key of the dict.
+    graph.add_conditional_edges(START, choose_path, {"search": "rank_places", "negotiate": "check_negotiation"})
+
+    graph.add_conditional_edges("rank_places", after_ranking, {"fetch_reviews": "fetch_reviews", "done": END})
+    graph.add_edge("fetch_reviews", "pick_winner")
+    graph.add_edge("pick_winner", END)
+
+    graph.add_conditional_edges("check_negotiation", after_check, {"draft_message": "draft_message", "done": END})
+    graph.add_edge("draft_message", "send_sms")
+    graph.add_edge("send_sms", END)
+
+    # 3. Compile.
+    #    checkpointer: saves the state after every node, per thread_id (in RAM - lost on restart).
+    #    interrupt_before: stop right before send_sms, so a human can approve the SMS.
+    return graph.compile(checkpointer=MemorySaver(), interrupt_before=["send_sms"])
 
 
-# Initialize the agent
-negotiator_agent = create_negotiator_agent()
+def thread_config(thread_id: str) -> dict:
+    """LangGraph finds a conversation's saved state by its thread_id."""
+    config = {"configurable": {"thread_id": thread_id}}
+    # Tracing: without this, the LangChain instrumentor would use thread_id as the session id
+    if session_id := session_id_var.get():
+        config["metadata"] = {"session_id": session_id}
+    return config
+
+
+# One agent for the whole app. Each user search gets its own thread_id.
+agent = build_agent()
