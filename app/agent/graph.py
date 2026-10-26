@@ -11,15 +11,15 @@ The agent's flowchart, built with LangGraph.
       └── route == "negotiate" ──► check_negotiation
                                       │  after_check()
                                       ├── deal / rejected / waiting ─► END
-                                      └──► draft_message ──⏸──► send_sms ──► END
-                                                 (pause: human approves the SMS)
+                                      └──► draft_message ──⏸──► send_message ──► END
+                                                 (pause: human approves the message)
 
 Nodes live in search_nodes.py and negotiation_nodes.py.
 """
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from app.agent.negotiation_nodes import after_check, check_negotiation_node, draft_message_node, send_sms_node
+from app.agent.negotiation_nodes import after_check, check_negotiation_node, draft_message_node, send_message_node
 from app.agent.search_nodes import after_ranking, fetch_reviews_node, pick_winner_node, rank_places_node
 from app.agent.state import AgentState
 from app.telemetry import session_id_var
@@ -39,7 +39,7 @@ def build_agent():
     graph.add_node("pick_winner", pick_winner_node)
     graph.add_node("check_negotiation", check_negotiation_node)
     graph.add_node("draft_message", draft_message_node)
-    graph.add_node("send_sms", send_sms_node)
+    graph.add_node("send_message", send_message_node)
 
     # 2. Connect them. Conditional edges call a function that returns a key of the dict.
     graph.add_conditional_edges(START, choose_path, {"search": "rank_places", "negotiate": "check_negotiation"})
@@ -49,13 +49,13 @@ def build_agent():
     graph.add_edge("pick_winner", END)
 
     graph.add_conditional_edges("check_negotiation", after_check, {"draft_message": "draft_message", "done": END})
-    graph.add_edge("draft_message", "send_sms")
-    graph.add_edge("send_sms", END)
+    graph.add_edge("draft_message", "send_message")
+    graph.add_edge("send_message", END)
 
     # 3. Compile.
     #    checkpointer: saves the state after every node, per thread_id (in RAM - lost on restart).
-    #    interrupt_before: stop right before send_sms, so a human can approve the SMS.
-    return graph.compile(checkpointer=MemorySaver(), interrupt_before=["send_sms"])
+    #    interrupt_before: stop right before send_message, so a human can approve the message.
+    return graph.compile(checkpointer=MemorySaver(), interrupt_before=["send_message"])
 
 
 def thread_config(thread_id: str) -> dict:

@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     # --- Review scraping (WebScraping.AI) ---
     webscraping_ai_api_key: str = ""        # optional; without it reviews are skipped
 
-    # --- SMS (provider not wired up yet - Twilio is planned) ---
+    # --- Chat with the shop: WhatsApp via Twilio (see app/tools/chat.py) ---
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_number: str = "+14155238886"  # Twilio's shared WhatsApp sandbox number
     default_target_number: str = ""         # used when a shop has no phone number, e.g. +919876543210
+    force_target_number: str = ""           # testing: message THIS number instead of the shop's, e.g. your own phone
 
     # --- Langfuse: prompts (app/prompts.py) + tracing (app/telemetry.py) ---
     langfuse_public_key: str                # required: every prompt is loaded from Langfuse

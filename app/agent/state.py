@@ -29,6 +29,6 @@ class AgentState(TypedDict, total=False):
     target_price: float | None
     negotiation_history: list[dict]      # [{"role": "agent" | "shopkeeper", "content": "...", "timestamp": int}]
     negotiation_status: str              # see NegotiationStatus in negotiation_nodes.py
-    negotiation_start_time: int          # unix time; older SMS in the inbox are ignored
-    planned_message: str                 # SMS drafted by the LLM, waiting for human approval
-    strategy_reasoning: str              # why the LLM wrote that SMS
+    negotiation_start_time: int          # unix time; older message in the inbox are ignored
+    planned_message: str                 # message drafted by the LLM, waiting for human approval
+    strategy_reasoning: str              # why the LLM wrote that message

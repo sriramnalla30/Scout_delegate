@@ -1,10 +1,10 @@
 """
-Nodes of the NEGOTIATION path. One run of this path = one SMS turn:
+Nodes of the NEGOTIATION path. One run of this path = one message turn:
 
     check_negotiation -> (deal done / rejected / waiting) -> END
-                      -> draft_message -> ⏸ PAUSE for human approval -> send_sms -> END
+                      -> draft_message -> ⏸ PAUSE for human approval -> send_message -> END
 
-The pause happens because graph.py compiles the graph with interrupt_before=["send_sms"].
+The pause happens because graph.py compiles the graph with interrupt_before=["send_message"].
 The graph is started again by the API when the shopkeeper replies (see /agent/check-reply).
 Prompts "negotiation-judge" and "negotiation-drafter" come from Langfuse (saved copies in prompts/).
 """
@@ -19,7 +19,7 @@ from app.agent.state import AgentState
 from app.config import settings
 from app.llm import get_llm
 from app.prompts import ainvoke_prompt
-from app.tools.sms import normalize_phone, send_sms
+from app.tools.chat import normalize_phone, send_message
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 class NegotiationStatus:
     """All values `negotiation_status` can have."""
     CONTINUE = "continue"                    # we should send another message
-    WAITING_FOR_REPLY = "waiting_for_reply"  # SMS sent, waiting for the shopkeeper
+    WAITING_FOR_REPLY = "waiting_for_reply"  # message sent, waiting for the shopkeeper
     DEAL_REACHED = "deal_reached"            # shopkeeper agreed
     REJECTED = "rejected"                    # shopkeeper said no for good
-    SMS_FAILED = "sms_failed"                # the SMS gateway did not send our message
+    SEND_FAILED = "send_failed"                # Twilio did not send our message
     TERMINATED = "terminated"                # user pressed "End" in the chat
 
 
@@ -40,8 +40,12 @@ def get_target_place(state: AgentState) -> dict:
 
 
 def get_target_phone(state: AgentState) -> str:
-    """The shop's phone from SerpStack, or DEFAULT_TARGET_NUMBER from .env if the shop has none."""
-    return normalize_phone(get_target_place(state).get("phone", "")) or normalize_phone(settings.default_target_number)
+    """FORCE_TARGET_NUMBER (testing) if set, else the shop's phone from SerpStack, else DEFAULT_TARGET_NUMBER."""
+    return (
+        normalize_phone(settings.force_target_number)
+        or normalize_phone(get_target_place(state).get("phone", ""))
+        or normalize_phone(settings.default_target_number)
+    )
 
 
 def format_history(history: list[dict]) -> str:
@@ -95,11 +99,11 @@ def after_check(state: AgentState) -> str:
 
 class DraftedMessage(BaseModel):
     reasoning: str = Field(description="Your negotiation strategy, including how you used the reviews")
-    message: str = Field(description="The exact SMS to send")
+    message: str = Field(description="The exact message to send")
 
 
 async def draft_message_node(state: AgentState) -> dict:
-    """Let the LLM write the next SMS. It is NOT sent yet - a human must approve it first."""
+    """Let the LLM write the next message. It is NOT sent yet - a human must approve it first."""
     place = get_target_place(state)
     reviews = state.get("reviews", {}).get(place.get("name"), [])
 
@@ -118,20 +122,20 @@ async def draft_message_node(state: AgentState) -> dict:
 
 
 # ------------------------------------------------------------------
-# Node 3: send_sms  (only runs after the human approved - see /agent/approve)
+# Node 3: send_message  (only runs after the human approved - see /agent/approve)
 # ------------------------------------------------------------------
 
-async def send_sms_node(state: AgentState) -> dict:
-    """Send the approved SMS and remember it in the conversation history."""
+async def send_message_node(state: AgentState) -> dict:
+    """Send the approved message and remember it in the conversation history."""
     message = state["planned_message"]
     phone = get_target_phone(state)
 
-    # send_sms is normal blocking code, so run it in a background thread
-    if not phone or not await asyncio.to_thread(send_sms, phone, message):
-        logger.error(f"send_sms: could not send to {phone or '(no phone number)'}")
-        return {"negotiation_status": NegotiationStatus.SMS_FAILED}
+    # send_message is normal blocking code, so run it in a background thread
+    if not phone or not await asyncio.to_thread(send_message, phone, message):
+        logger.error(f"send_message: could not send to {phone or '(no phone number)'}")
+        return {"negotiation_status": NegotiationStatus.SEND_FAILED}
 
-    logger.info(f"send_sms: sent to {phone}: {message!r}")
+    logger.info(f"send_message: sent to {phone}: {message!r}")
     history = state.get("negotiation_history", []) + [
         {"role": "agent", "content": message, "timestamp": int(time.time())}
     ]

@@ -10,7 +10,7 @@ Set LANGFUSE_TRACING=false on your laptop to keep it light (prompts still load f
 
 What gets recorded automatically:
     - every web request to FastAPI             (FastAPIInstrumentor)
-    - every outgoing call made with `requests` (RequestsInstrumentor) - SerpStack, reviews, SMS
+    - every outgoing call made with `requests` (RequestsInstrumentor) - SerpStack, reviews, message
     - every LangGraph node and Groq LLM call   (LangChainInstrumentor from OpenInference)
 
 Sessions: the web page creates one session id per browser tab and sends it with every request
@@ -32,7 +32,7 @@ from app.prompts import active_prompt
 
 logger = logging.getLogger(__name__)
 
-# Query parameters that must never leave the app: API keys, SMS recipient and text
+# Query parameters that must never leave the app: API keys, message recipient and text
 SECRET_QUERY_PARAMS = {"access_key", "api_key", "apikey", "recipients", "message"}
 
 # Session id of the request being handled (set by SessionIdMiddleware)

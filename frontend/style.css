@@ -531,7 +531,7 @@ body {
     font-weight: 700;
 }
 
-/* Notice card for SMS gateway instructions */
+/* Notice card for the WhatsApp (Twilio) notice */
 .notice-card {
     background: #f0f7ff;
     border: 1px dashed var(--accent-blue);

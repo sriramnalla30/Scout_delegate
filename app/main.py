@@ -12,10 +12,10 @@ Endpoints, in the order the user meets them:
     GET  /agent/stream           run the search graph and stream each step to the browser (SSE)
 
   NEGOTIATION
-    POST /agent/negotiate/start  user clicked "Negotiate" -> LLM drafts the first SMS
-    POST /agent/approve          user approved/edited the draft -> SMS is sent
+    POST /agent/negotiate/start  user clicked "Negotiate" -> LLM drafts the first message
+    POST /agent/approve          user approved/edited the draft -> message is sent
     GET  /agent/check-reply      browser asks every 10 s: did the shop reply? -> LLM drafts an answer
-    POST /agent/send-message     user typed an SMS themselves
+    POST /agent/send-message     user typed a message themselves
     POST /agent/terminate        user ended the negotiation
 """
 import asyncio
@@ -39,7 +39,7 @@ from app.schemas import ApprovalRequest, ManualMessageRequest, NegotiationStartR
 from app.prompts import check_prompts
 from app.telemetry import setup_telemetry, shutdown_telemetry, tag_span
 from app.tools.serpstack import search_places
-from app.tools.sms import get_inbox, same_phone, send_sms
+from app.tools.chat import get_inbox, same_phone, send_message
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ def describe_step(node: str, output: dict) -> dict:
 async def negotiate_start(request: NegotiationStartRequest):
     """
     Start the negotiation path of the graph for one place.
-    The graph runs check_negotiation -> draft_message and then PAUSES before send_sms.
+    The graph runs check_negotiation -> draft_message and then PAUSES before send_message.
     """
     state = await load_state(request.thread_id)
     tag_span(thread_id=request.thread_id, place=request.place_name)
@@ -214,14 +214,14 @@ async def negotiate_start(request: NegotiationStartRequest):
 @app.post("/agent/approve")
 async def approve(request: ApprovalRequest):
     """
-    Human-in-the-loop: the graph is paused before send_sms.
-    Approve -> (optionally replace the draft with the user's edit) -> resume -> SMS is sent.
+    Human-in-the-loop: the graph is paused before send_message.
+    Approve -> (optionally replace the draft with the user's edit) -> resume -> message is sent.
     Reject  -> nothing is sent; we keep waiting for the shopkeeper.
     """
     config = thread_config(request.thread_id)
     tag_span(thread_id=request.thread_id, approved=request.approved)
     snapshot = await agent.aget_state(config)
-    if snapshot.next != ("send_sms",):
+    if snapshot.next != ("send_message",):
         raise HTTPException(status_code=409, detail="There is no drafted message waiting for approval.")
 
     if not request.approved:
@@ -235,7 +235,7 @@ async def approve(request: ApprovalRequest):
 
     state = await load_state(request.thread_id)
     return {
-        "status": state["negotiation_status"],  # "waiting_for_reply" or "sms_failed"
+        "status": state["negotiation_status"],  # "waiting_for_reply" or "send_failed"
         "sent_message": state["planned_message"],
         "place_name": get_target_place(state).get("name", "Shop"),
         "phone": get_target_phone(state),
@@ -247,7 +247,7 @@ async def check_reply(thread_id: str):
     """
     Called by the browser every 10 seconds while waiting.
     If the shop answered: add the reply to the history and run the graph again,
-    which judges the reply and (if needed) drafts our next SMS for approval.
+    which judges the reply and (if needed) drafts our next message for approval.
     """
     tag_span(thread_id=thread_id)
     state = await load_state(thread_id)
@@ -278,7 +278,7 @@ async def check_reply(thread_id: str):
 
 async def find_new_reply(state: dict) -> dict | None:
     """
-    Look in the phone's inbox for the oldest SMS that:
+    Look in the Twilio WhatsApp inbox for the oldest message that:
       - comes from the shop we texted,
       - arrived after the negotiation started,
       - is not already in the conversation history.
@@ -292,14 +292,14 @@ async def find_new_reply(state: dict) -> dict | None:
     }
 
     candidates = []
-    for sms in await asyncio.to_thread(get_inbox):
-        text = (sms.get("message") or sms.get("body") or "").strip()
+    for incoming in await asyncio.to_thread(get_inbox):
+        text = (incoming.get("message") or incoming.get("body") or "").strip()
         try:
-            timestamp = int(sms.get("timestamp_unix") or 0)
+            timestamp = int(incoming.get("timestamp_unix") or 0)
         except ValueError:
             timestamp = 0
 
-        if not text or not same_phone(str(sms.get("number", "")), shop_phone):
+        if not text or not same_phone(str(incoming.get("number", "")), shop_phone):
             continue
         if timestamp and timestamp < started_at:
             continue
@@ -312,13 +312,13 @@ async def find_new_reply(state: dict) -> dict | None:
 
 @app.post("/agent/send-message")
 async def send_manual_message(request: ManualMessageRequest):
-    """The user typed their own SMS: send it directly, without the LLM."""
+    """The user typed their own message: send it directly, without the LLM."""
     state = await load_state(request.thread_id)
     phone = get_target_phone(state)
     if not phone:
         raise HTTPException(status_code=400, detail="This shop has no phone number and DEFAULT_TARGET_NUMBER is not set.")
 
-    if not await asyncio.to_thread(send_sms, phone, request.message):
+    if not await asyncio.to_thread(send_message, phone, request.message):
         return {"success": False}
 
     history = state.get("negotiation_history", []) + [

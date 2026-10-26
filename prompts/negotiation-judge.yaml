@@ -5,7 +5,7 @@ name: negotiation-judge
 type: chat
 messages:
 - role: system
-  content: You judge an SMS price negotiation. Based on the shopkeeper's latest reply, did we reach a deal, did they refuse for good, or should we keep negotiating?
+  content: You judge a message price negotiation. Based on the shopkeeper's latest reply, did we reach a deal, did they refuse for good, or should we keep negotiating?
 - role: user
   content: |-
     Our target price: {{target_price}}
