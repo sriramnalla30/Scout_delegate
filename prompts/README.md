@@ -12,7 +12,7 @@ These files are a readable backup and give the prompts a history in git.
 | `pick-winner` | `app/agent/search_nodes.py` (pick_winner) | read the reviews, choose the best place |
 | `review-extractor` | `app/tools/reviews.py` | find the real reviews in a scraped Google page |
 | `negotiation-judge` | `app/agent/negotiation_nodes.py` (check_negotiation) | deal, refused, or keep going? |
-| `negotiation-drafter` | `app/agent/negotiation_nodes.py` (draft_message) | write the next SMS to the shop |
+| `negotiation-drafter` | `app/agent/negotiation_nodes.py` (draft_message) | write the next message to the shop |
 
 `{{name}}` marks a variable that the app fills in at run time.
 

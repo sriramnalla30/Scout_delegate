@@ -12,8 +12,8 @@
 
 <!--
     Page layout:
-      LEFT  : search box -> agent log (+ SMS approval panel) -> results
-      RIGHT : SMS chat with the shop (appears once the first SMS is sent)
+      LEFT  : search box -> agent log (+ message approval panel) -> results
+      RIGHT : message chat with the shop (appears once the first message is sent)
       MODAL : "Start negotiation" form
     All behaviour is in app.js.
 -->
@@ -45,9 +45,9 @@
             </section>
 
             <section class="notice-card">
-                <div class="notice-title">SMS gateway</div>
+                <div class="notice-title">WhatsApp (Twilio)</div>
                 <p class="notice-body">
-                    Negotiation messages are real SMS (the SMS provider is being switched to Twilio).
+                    Negotiation messages are sent over WhatsApp through Twilio.
                     They go to the shop's phone number from Google. If a shop has no number,
                     <code>DEFAULT_TARGET_NUMBER</code> from <code>.env</code> is used instead.
                 </p>
@@ -66,10 +66,10 @@
 
                 <div class="log-container" id="logContainer"></div>
 
-                <!-- Human-in-the-loop: approve the first SMS -->
+                <!-- Human-in-the-loop: approve the first message -->
                 <div class="hitl-panel" id="approvalPanel" hidden>
                     <div class="hitl-header">
-                        <h2>⏸️ Approve the first SMS</h2>
+                        <h2>⏸️ Approve the first message</h2>
                         <p>Nothing is sent until you approve. You can edit the text.</p>
                     </div>
                     <div class="hitl-section">
@@ -98,7 +98,7 @@
             </section>
         </main>
 
-        <!-- 4. SMS chat with the shop -->
+        <!-- 4. message chat with the shop -->
         <aside class="right-panel" id="chatPanel" hidden>
             <div class="chat-container">
                 <div class="chat-header">
@@ -115,7 +115,7 @@
                 </div>
                 <div class="chat-messages" id="chatMessages"></div>
 
-                <!-- Human-in-the-loop: approve each follow-up SMS -->
+                <!-- Human-in-the-loop: approve each follow-up message -->
                 <div class="chat-draft" id="chatDraft" hidden>
                     <div class="chat-draft-title">🤖 Agent suggests sending:</div>
                     <textarea id="chatDraftMessage" class="message-box" rows="2"></textarea>

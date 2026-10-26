@@ -23,14 +23,14 @@ class NegotiationStartRequest(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    """POST /agent/approve - user approved (or edited) the drafted SMS."""
+    """POST /agent/approve - user approved (or edited) the drafted message."""
     thread_id: str
     approved: bool = True
     edited_message: Optional[str] = None
 
 
 class ManualMessageRequest(BaseModel):
-    """POST /agent/send-message - user typed their own SMS in the chat box."""
+    """POST /agent/send-message - user typed their own message in the chat box."""
     thread_id: str
     message: str
 

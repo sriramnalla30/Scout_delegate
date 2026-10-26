@@ -3,8 +3,8 @@
  *
  *   1. SEARCH       startSearch()  -> POST /agent/start, then GET /agent/stream (live steps)
  *   2. RESULTS      showResults()  -> cards with Maps / Call / Negotiate buttons
- *   3. NEGOTIATE    launchNegotiation() -> POST /agent/negotiate/start (LLM drafts the 1st SMS)
- *                   approveFirstMessage() -> POST /agent/approve (SMS is sent)
+ *   3. NEGOTIATE    launchNegotiation() -> POST /agent/negotiate/start (LLM drafts the 1st message)
+ *                   approveFirstMessage() -> POST /agent/approve (message is sent)
  *   4. CHAT         checkForReply() every 10 s -> GET /agent/check-reply
  *                   sendChatDraft() / skipChatDraft() / sendManualMessage() / endNegotiation()
  */
@@ -28,7 +28,7 @@ const SESSION_ID = (() => {
 })();
 
 let threadId = null;          // id of this conversation on the server
-let pollTimer = null;         // setInterval handle while waiting for SMS replies
+let pollTimer = null;         // setInterval handle while waiting for message replies
 let selectedPlace = null;     // place name chosen in the negotiation form
 
 
@@ -38,7 +38,7 @@ let selectedPlace = null;     // place name chosen in the negotiation form
 
 const $ = (id) => document.getElementById(id);
 
-/** Make text safe to put inside HTML (place names, SMS texts, ... come from outside). */
+/** Make text safe to put inside HTML (place names, message texts, ... come from outside). */
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text ?? '';
@@ -258,7 +258,7 @@ function placeCard(place, isBest) {
 
 
 // ============================================================
-// 3. NEGOTIATE: form -> LLM drafts first SMS -> human approves
+// 3. NEGOTIATE: form -> LLM drafts first message -> human approves
 // ============================================================
 
 function openNegotiationModal(placeName) {
@@ -282,7 +282,7 @@ async function launchNegotiation() {
 
     setStep(6);
     addLog('info', `🤝 Starting negotiation with <b>${escapeHtml(selectedPlace)}</b>${price ? ` (target ₹${escapeHtml(price)})` : ''}`);
-    setThinking('LLM is drafting the first SMS...');
+    setThinking('LLM is drafting the first message...');
     $('workflowContainer').scrollIntoView({ behavior: 'smooth' });
 
     try {
@@ -303,7 +303,7 @@ async function launchNegotiation() {
 function showApprovalPanel(data) {
     $('approvalTarget').textContent = data.phone
         ? `${data.place.name} (${data.phone})`
-        : `${data.place.name} — ⚠️ no phone number! Set DEFAULT_TARGET_NUMBER in .env or the SMS will fail.`;
+        : `${data.place.name} — ⚠️ no phone number! Set DEFAULT_TARGET_NUMBER in .env or the message will fail.`;
     $('approvalReasoning').textContent = data.reasoning;
     $('approvalMessage').value = data.planned_message;
     $('approvalPanel').hidden = false;
@@ -312,7 +312,7 @@ function showApprovalPanel(data) {
 
 async function approveFirstMessage() {
     $('approvalPanel').hidden = true;
-    setThinking('Sending SMS...');
+    setThinking('Sending message...');
     try {
         const data = await api('/agent/approve', {
             thread_id: threadId,
@@ -321,10 +321,10 @@ async function approveFirstMessage() {
         });
         setThinking(null);
         if (data.status !== 'waiting_for_reply') {
-            addLog('error', '❌ The SMS could not be sent. Check the SMS provider settings and the server log.');
+            addLog('error', '❌ The message could not be sent. Check the Twilio settings and the server log.');
             return;
         }
-        addLog('success', `📤 SMS sent to ${escapeHtml(data.place_name)}`);
+        addLog('success', `📤 message sent to ${escapeHtml(data.place_name)}`);
         openChat(data.place_name, data.sent_message);
     } catch (error) {
         setThinking(null);
@@ -441,7 +441,7 @@ async function sendChatDraft() {
             addChatMessage('agent', data.sent_message);
             startPolling();
         } else {
-            setChatStatus('❌ SMS could not be sent');
+            setChatStatus('❌ message could not be sent');
         }
     } catch (error) {
         setChatStatus(`❌ ${error.message}`);
@@ -466,7 +466,7 @@ async function sendManualMessage() {
             addChatMessage('agent', message);
             startPolling();
         } else {
-            setChatStatus('❌ SMS could not be sent');
+            setChatStatus('❌ message could not be sent');
         }
     } catch (error) {
         setChatStatus(`❌ ${error.message}`);

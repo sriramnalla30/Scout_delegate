@@ -1,8 +1,8 @@
 # Place Discover Agent
 
-An AI agent that **finds local places** (gyms, cafes, PGs, ...), **reads their Google reviews to pick the best one**, and can **negotiate the price with the shop by real SMS**. Every SMS waits for your approval before it is sent.
+An AI agent that **finds local places** (gyms, cafes, PGs, ...), **reads their Google reviews to pick the best one**, and can **negotiate the price with the shop by WhatsApp**. Every message waits for your approval before it is sent.
 
-Built with **FastAPI** (web server), **LangGraph** (agent workflow), **Groq / GPT-OSS 120B** (LLM), **SerpStack** (Google search), **WebScraping.AI** (reviews). SMS sending is being moved to **Twilio** (not wired up yet).
+Built with **FastAPI** (web server), **LangGraph** (agent workflow), **Groq / GPT-OSS 120B** (LLM), **SerpStack** (Google search), **WebScraping.AI** (reviews). Chat with shops runs over **WhatsApp via Twilio**.
 
 > 📖 New to the code? Read **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)**. It walks through the whole project file by file.
 > 🔎 What was cleaned up and why: **[docs/CODE_REVIEW.md](docs/CODE_REVIEW.md)**.
@@ -16,8 +16,8 @@ Built with **FastAPI** (web server), **LangGraph** (agent workflow), **Groq / GP
 3. SerpStack searches Google → ~10 places with rating, address, phone
 4. The agent ranks them by rating, reads reviews of the top 3, and the LLM picks a winner
 5. You click **Negotiate** on any place and enter your goal / target price
-6. The LLM drafts an SMS → **you approve or edit it** → it is sent from your phone
-7. The page checks for the shop's reply every 10 s → the LLM judges the reply and drafts the next SMS → you approve again ... until a deal, a refusal, or you press **End**
+6. The LLM drafts a message → **you approve or edit it** → it is sent over WhatsApp (Twilio)
+7. The page checks for the shop's reply every 10 s → the LLM judges the reply and drafts the next message → you approve again ... until a deal, a refusal, or you press **End**
 
 ---
 
@@ -70,12 +70,12 @@ app/
 │   ├── state.py            what the agent remembers
 │   ├── query_parser.py     sentence -> city / place type
 │   ├── search_nodes.py     rank_places, fetch_reviews, pick_winner
-│   ├── negotiation_nodes.py check_negotiation, draft_message, send_sms
+│   ├── negotiation_nodes.py check_negotiation, draft_message, send_message
 │   └── graph.py            connects the nodes into a flowchart
 └── tools/                  talking to outside services
     ├── serpstack.py        Google search
     ├── reviews.py          review scraping
-    └── sms.py              send / receive SMS
+    └── chat.py              send / receive message
 frontend/
 ├── index.html              page layout
 ├── app.js                  page logic (calls the API)
@@ -108,7 +108,7 @@ OpenTelemetry (`app/telemetry.py`) and sent to **Langfuse → Tracing**, with pr
 tokens, cost, and the prompt version each LLM call used.
 
 - **Sessions:** each browser tab gets one session id, shown top-right on the page (click to copy). All traces of that visit are grouped under **Langfuse → Sessions**.
-- **Privacy:** API keys, SMS recipients and SMS text are removed from recorded URLs. Prompts and answers (including the SMS negotiation text) are stored in Langfuse.
+- **Privacy:** API keys, message recipients and message text are removed from recorded URLs. Prompts and answers (including the message negotiation text) are stored in Langfuse.
 - **On your laptop:** set `LANGFUSE_TRACING=false` to send no traces (prompts still load from Langfuse).
 
 Setup: create a project at cloud.langfuse.com → **Settings → API keys**, and set `LANGFUSE_PUBLIC_KEY`,
@@ -130,4 +130,4 @@ One-time setup:
 4. Log in once: `python scripts/google_drive_login.py` (your browser opens; click Allow). This saves `google_token.json` (git-ignored) and puts a `connection-test.json` file in the Drive folder.
 5. Set `DRIVE_TRACES=true` in `.env` and start the app. Files appear in the Drive folder `place-discover-traces` about 15 seconds after each search.
 
-Notes: the app asks only for the `drive.file` permission, so it can see only the files it created. While the Google Cloud app is in *Testing*, Google expires the login after 7 days: run the login script again when the log says so. Saved traces contain prompts and answers (including SMS negotiation text), so keep the folder private. This is meant for your laptop; on Render the login files are not available, so leave it off there.
+Notes: the app asks only for the `drive.file` permission, so it can see only the files it created. While the Google Cloud app is in *Testing*, Google expires the login after 7 days: run the login script again when the log says so. Saved traces contain prompts and answers (including message negotiation text), so keep the folder private. This is meant for your laptop; on Render the login files are not available, so leave it off there.

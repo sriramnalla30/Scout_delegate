@@ -7,7 +7,7 @@ This guide explains every part of the code, in the order things happen when some
 1. [The big picture](#1-the-big-picture)
 2. [Five concepts you need first](#2-five-concepts-you-need-first)
 3. [Journey part 1: searching](#3-journey-part-1-searching)
-4. [Journey part 2: negotiating by SMS](#4-journey-part-2-negotiating-by-sms)
+4. [Journey part 2: negotiating by message](#4-journey-part-2-negotiating-by-message)
 5. [The graph in one picture](#5-the-graph-in-one-picture)
 6. [The state: what the agent remembers](#6-the-state-what-the-agent-remembers)
 7. [File-by-file reference](#7-file-by-file-reference)
@@ -27,7 +27,7 @@ There are three layers:
  │ index.html        │ ───────►  │ main.py  (API endpoints) │ ───────► │ Groq (LLM)       │
  │ app.js            │ ◄───────  │    │                     │          │ SerpStack        │
  │ style.css         │  JSON/SSE │    ▼                     │          │ WebScraping.AI   │
- └───────────────────┘           │ agent/   (LangGraph)     │          │ SMS (Twilio, TBD)│
+ └───────────────────┘           │ agent/   (LangGraph)     │          │ WhatsApp (Twilio)│
                                  │ tools/   (API wrappers)  │          └──────────────────┘
                                  └──────────────────────────┘
 ```
@@ -95,9 +95,9 @@ Three ways the code uses the saved state:
 
 ### 2.5 Interrupt = human-in-the-loop
 ```python
-graph.compile(..., interrupt_before=["send_sms"])
+graph.compile(..., interrupt_before=["send_message"])
 ```
-The graph **stops right before** `send_sms`. The state is saved and `.next` becomes `("send_sms",)`. Nothing happens until someone calls `agent.ainvoke(None, config)`. That call is in `/agent/approve`, which runs when you click Approve. This is how the agent waits for your approval before every SMS.
+The graph **stops right before** `send_message`. The state is saved and `.next` becomes `("send_message",)`. Nothing happens until someone calls `agent.ainvoke(None, config)`. That call is in `/agent/approve`, which runs when you click Approve. This is how the agent waits for your approval before every message.
 
 ### Bonus: Server-Sent Events (SSE)
 `/agent/stream` keeps the HTTP connection open and sends lines like `data: {...json...}` as each step finishes. In the browser, `new EventSource(url)` receives them one by one (`streamSearch()` in `app.js`). That's how the log fills in live.
@@ -157,12 +157,12 @@ Sends all candidates and their reviews to the LLM (`WinnerSelection`: winner nam
 
 ---
 
-## 4. Journey part 2: negotiating by SMS
+## 4. Journey part 2: negotiating by message
 
 ### Step 5: the user clicks "Negotiate" and fills the form
 **`app.js` → `openNegotiationModal()` → `launchNegotiation()`** calls `POST /agent/negotiate/start` with the place name, goal, and target price.
 
-### Step 6: the LLM drafts the first SMS, then the graph pauses
+### Step 6: the LLM drafts the first message, then the graph pauses
 **`app/main.py` → `negotiate_start()`**
 Finds the place in `serp_results` and calls
 ```python
@@ -172,21 +172,21 @@ A **new run** starts at START. This time `choose_path()` sees `route == "negotia
 
 - **`check_negotiation_node()`** (`negotiation_nodes.py`): the history is empty → status `continue`
 - **`after_check()`**: `continue` → `draft_message`
-- **`draft_message_node()`**: the LLM (`DraftedMessage`) writes the SMS using the goal, target price, and the place's reviews (as leverage). Saves `planned_message` and `strategy_reasoning`.
-- **⏸ interrupt before `send_sms`**: `ainvoke` returns. Nothing has been sent.
+- **`draft_message_node()`**: the LLM (`DraftedMessage`) writes the message using the goal, target price, and the place's reviews (as leverage). Saves `planned_message` and `strategy_reasoning`.
+- **⏸ interrupt before `send_message`**: `ainvoke` returns. Nothing has been sent.
 
 The endpoint returns the draft. **`app.js` → `showApprovalPanel()`** shows it in the yellow "sticky note" panel, where you can edit it.
 
-### Step 7: the user approves → the SMS is sent
+### Step 7: the user approves → the message is sent
 **`app.js` → `approveFirstMessage()`** → `POST /agent/approve`
 **`app/main.py` → `approve()`**
-1. Checks that the graph is really paused at `send_sms` (otherwise error 409)
+1. Checks that the graph is really paused at `send_message` (otherwise error 409)
 2. If you edited the text: `aupdate_state(config, {"planned_message": edited})`
-3. `agent.ainvoke(None, config)`: **continue from the pause** → **`send_sms_node()`**:
+3. `agent.ainvoke(None, config)`: **continue from the pause** → **`send_message_node()`**:
    - `get_target_phone()` = the shop's phone from Google, or `DEFAULT_TARGET_NUMBER` from `.env`
-   - `send_sms()` (`app/tools/sms.py`) sends it through the SMS provider (currently a stub; Twilio planned)
+   - `send_message()` (`app/tools/chat.py`) sends it over WhatsApp through Twilio
    - adds `{"role": "agent", "content": ...}` to `negotiation_history`
-   - sets status `waiting_for_reply` (or `sms_failed`)
+   - sets status `waiting_for_reply` (or `send_failed`)
    - → END
 
 The browser opens the chat panel (`openChat()`) and starts polling.
@@ -196,7 +196,7 @@ The browser opens the chat panel (`openChat()`) and starts polling.
 
 **`app/main.py` → `check_reply()`**
 1. If the status isn't `waiting_for_reply` → answer "no reply" and stop.
-2. **`find_new_reply()`** reads the phone's inbox (`get_inbox()`) and keeps only SMS that:
+2. **`find_new_reply()`** reads the Twilio WhatsApp inbox (`get_inbox()`) and keeps only messages that:
    - come **from the shop's number** (`same_phone()` compares the last 10 digits, so `+91 99885 93333` equals `919988593333`, and senders like `AD-ICICIT` never match)
    - arrived **after** the negotiation started
    - are **not already** in the history
@@ -212,7 +212,7 @@ The browser shows the reply. If a draft is waiting, it shows it with **Send / Sk
 - **Send** → `sendChatDraft()` → `POST /agent/approve` → back to Step 7
 - **Skip** → `POST /agent/approve` with `approved: false`. Nothing is sent, the status goes back to `waiting_for_reply`, and polling resumes.
 
-So **one graph run = one SMS turn**, and the loop is: reply → judge → draft → you approve → send → wait.
+So **one graph run = one message turn**, and the loop is: reply → judge → draft → you approve → send → wait.
 
 ### Other buttons in the chat
 - **Typing your own message** → `sendManualMessage()` → `POST /agent/send-message`. Sends it directly (no LLM, no graph) and adds it to the history.
@@ -233,8 +233,8 @@ START
   └── "negotiate" ──► check_negotiation
                          │  after_check()
                          ├── deal / rejected / waiting ─────► END
-                         └──► draft_message ──⏸──► send_sms ──► END
-                                   (pause: human approves the SMS)
+                         └──► draft_message ──⏸──► send_message ──► END
+                                   (pause: human approves the message)
 ```
 
 Who starts each run:
@@ -242,7 +242,7 @@ Who starts each run:
 | Run | Started by | Input |
 | --- | --- | --- |
 | Search | `GET /agent/stream` | `None` (the state was saved by `/agent/start`) |
-| First SMS | `POST /agent/negotiate/start` | `route="negotiate"`, the place, the target price |
+| First message | `POST /agent/negotiate/start` | `route="negotiate"`, the place, the target price |
 | Resume after approval | `POST /agent/approve` | `None` (continue from the pause) |
 | Each reply | `GET /agent/check-reply` | the history with the new reply |
 
@@ -261,9 +261,9 @@ Defined in `app/agent/state.py`.
 | `reviews` | `fetch_reviews` | `pick_winner`, `draft_message` |
 | `winner_summary` | `pick_winner` | `/agent/stream` |
 | `target_price`, `negotiation_start_time` | `/agent/negotiate/start` | negotiation nodes, `find_new_reply()` |
-| `negotiation_history` | `send_sms`, `/agent/check-reply`, `/agent/send-message` | `check_negotiation`, `draft_message` |
-| `negotiation_status` | `check_negotiation`, `send_sms`, `/approve` (skip), `/terminate` | `after_check()`, `/agent/check-reply` |
-| `planned_message`, `strategy_reasoning` | `draft_message` (`planned_message` can be edited in `/approve`) | `send_sms`, API responses |
+| `negotiation_history` | `send_message`, `/agent/check-reply`, `/agent/send-message` | `check_negotiation`, `draft_message` |
+| `negotiation_status` | `check_negotiation`, `send_message`, `/approve` (skip), `/terminate` | `after_check()`, `/agent/check-reply` |
+| `planned_message`, `strategy_reasoning` | `draft_message` (`planned_message` can be edited in `/approve`) | `send_message`, API responses |
 
 `negotiation_status` values are listed in `NegotiationStatus` (`negotiation_nodes.py`).
 
@@ -280,11 +280,11 @@ Defined in `app/agent/state.py`.
 | `app/agent/state.py` | `AgentState` |
 | `app/agent/query_parser.py` | `parse_user_query()`, `build_search_text()` |
 | `app/agent/search_nodes.py` | `rank_places_node`, `after_ranking`, `fetch_reviews_node`, `pick_winner_node` |
-| `app/agent/negotiation_nodes.py` | `NegotiationStatus`, `check_negotiation_node`, `after_check`, `draft_message_node`, `send_sms_node`, phone helpers |
+| `app/agent/negotiation_nodes.py` | `NegotiationStatus`, `check_negotiation_node`, `after_check`, `draft_message_node`, `send_message_node`, phone helpers |
 | `app/agent/graph.py` | `build_agent()` wires everything; `agent` is the compiled graph; `thread_config()` |
 | `app/tools/serpstack.py` | `search_places()` and the three Google-result parsers |
 | `app/tools/reviews.py` | `fetch_reviews()`: WebScraping.AI → BeautifulSoup → LLM |
-| `app/tools/sms.py` | `send_sms()`, `get_inbox()`, `normalize_phone()`, `same_phone()` |
+| `app/tools/chat.py` | `send_message()`, `get_inbox()`, `normalize_phone()`, `same_phone()` |
 | `frontend/index.html` | Static layout: search card, log, approval panel, results, chat, modal |
 | `frontend/app.js` | All page logic, in journey order |
 | `frontend/style.css` | Styles |
@@ -314,7 +314,7 @@ FastAPI also generates interactive docs at **http://localhost:8000/docs**, where
 - **Memory is in RAM** (`MemorySaver`). Restarting the server forgets every conversation. To keep them, switch to `SqliteSaver` from the `langgraph-checkpoint-sqlite` package.
 - **Phone-number parsing is India-only** (`PHONE_PATTERN` in `serpstack.py`).
 - **Scraping Google is fragile.** If Google changes its page, `fetch_reviews` may find nothing. The winner is then picked on rating alone.
-- **No login.** Anyone who can open the server can send SMS from your phone. Don't expose it to the internet without adding authentication.
+- **No login.** Anyone who can open the server can send WhatsApp messages from your Twilio number. Don't expose it to the internet without adding authentication.
 - **Inbox polling.** Replies are found by reading the whole inbox every 10 s. Two identical texts with the same timestamp would count as one.
 
 ---
