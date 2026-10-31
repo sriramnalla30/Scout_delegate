@@ -1,29 +1,6 @@
-# Web server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-
-# Agent (LangGraph) + LLM (Groq)
-langgraph==0.2.50
-langchain-core==0.3.15
-langchain-groq==0.2.1
-
-# Settings from .env
-pydantic==2.9.2
-pydantic-settings==2.6.1
-
-# Calling outside services
-requests==2.31.0
-beautifulsoup4==4.12.3
-
-# message
-twilio==9.3.7
-
-# Langfuse tracing via OpenTelemetry, see app/telemetry.py
-opentelemetry-sdk==1.45.0
-opentelemetry-exporter-otlp-proto-http==1.45.0
-opentelemetry-instrumentation-fastapi==0.66b0
-opentelemetry-instrumentation-requests==0.66b0
-openinference-instrumentation-langchain==0.1.78
-
-# Reading/writing the saved prompt copies (scripts/sync_prompts.py)
-PyYAML==6.0.3
+langgraph>=1.2
+langchain>=1.4
+langchain-groq>=1.1
+fastapi>=0.110
+uvicorn>=0.27
+python-dotenv>=1.0

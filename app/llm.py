@@ -1,17 +1,26 @@
-"""
-One place to create the LLM, so every part of the app uses the same model.
-"""
+from groq import BadRequestError
+from langchain.agents.middleware import ModelRetryMiddleware
 from langchain_groq import ChatGroq
 
-from app.config import settings
+from app import config
 
 
-def get_llm(temperature: float = 0.3, use_second_key: bool = False) -> ChatGroq:
-    """
-    Return a Groq chat model (GPT-OSS 120B by default, see settings.llm_model).
+def get_llm() -> ChatGroq:
+    if not config.GROQ_API_KEY:
+        raise RuntimeError('GROQ_API_KEY is not set. Add it to .env (see .env.example).')
+    return ChatGroq(model=config.LLM_MODEL, api_key=config.GROQ_API_KEY, temperature=0,
+                    reasoning_effort=config.LLM_REASONING_EFFORT, max_retries=2, timeout=60)
 
-    temperature: 0 = predictable answers, 1 = more creative answers.
-    use_second_key: use GROQ_API_KEY_2 if it is set (falls back to GROQ_API_KEY).
-    """
-    api_key = (settings.groq_api_key_2 if use_second_key else "") or settings.groq_api_key
-    return ChatGroq(model=settings.llm_model, temperature=temperature, api_key=api_key)
+
+RETRYABLE_CODES = ('output_parse_failed', 'tool_use_failed')
+
+
+def _is_unparseable_output(error: Exception) -> bool:
+    """gpt-oss sometimes writes its reasoning where a tool call belongs; Groq answers 400.
+    The same request usually succeeds on the next try, so only these codes are retried."""
+    return isinstance(error, BadRequestError) and any(code in str(error) for code in RETRYABLE_CODES)
+
+
+def retry_middleware() -> ModelRetryMiddleware:
+    return ModelRetryMiddleware(max_retries=3, retry_on=_is_unparseable_output, on_failure='error',
+                                initial_delay=0.4, backoff_factor=1.5, jitter=False)

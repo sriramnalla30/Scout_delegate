@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import (
     Any,
-    Optional,
+    NamedTuple,
     Protocol,
     TypeVar,
     runtime_checkable,
@@ -14,6 +14,22 @@ SCHEDULED = "__scheduled__"
 INTERRUPT = "__interrupt__"
 RESUME = "__resume__"
 TASKS = "__pregel_tasks"
+
+
+class _DeltaSnapshot(NamedTuple):
+    """Snapshot blob for a DeltaChannel with finite snapshot_frequency.
+
+    Stored in checkpoint_blobs via the `EXT_DELTA_SNAPSHOT` msgpack ext code.
+    The ancestor walk in `BaseCheckpointSaver.get_delta_channel_history` terminates
+    when it encounters this type (any non-empty channel_values entry stops
+    the walk for that channel).
+
+    `from_checkpoint` reconstructs the channel value directly from `.value`
+    without replaying writes — the snapshot IS the accumulated state.
+    """
+
+    value: Any
+
 
 Value = TypeVar("Value", covariant=True)
 Update = TypeVar("Update", contravariant=True)
@@ -28,9 +44,9 @@ class ChannelProtocol(Protocol[Value, Update, C]):
     @property
     def UpdateType(self) -> Any: ...
 
-    def checkpoint(self) -> Optional[C]: ...
+    def checkpoint(self) -> C | None: ...
 
-    def from_checkpoint(self, checkpoint: Optional[C]) -> Self: ...
+    def from_checkpoint(self, checkpoint: C | None) -> Self: ...
 
     def update(self, values: Sequence[Update]) -> bool: ...
 

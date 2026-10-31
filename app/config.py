@@ -1,52 +1,21 @@
-"""
-Settings for the whole app (API keys, phone numbers, model name).
+import os
+from pathlib import Path
 
-Values are read from the `.env` file in the project root (copy `.env.example`).
-Environment variable names are case-insensitive: GROQ_API_KEY -> settings.groq_api_key
+from dotenv import dotenv_values
 
-Use anywhere with:
-    from app.config import settings
-"""
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    # extra="ignore" -> keys in .env that are not listed below are simply skipped
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    # --- LLM (Groq) ---
-    groq_api_key: str                       # required
-    groq_api_key_2: str = ""                # optional; the router node uses it to spread rate limits
-    llm_model: str = "openai/gpt-oss-120b"  # check available ones: https://console.groq.com/docs/models
-
-    # --- Place search (SerpStack) ---
-    serp_api_key: str                       # required
-    serp_api_url: str = "https://api.serpstack.com/search"
-
-    # --- Review scraping (WebScraping.AI) ---
-    webscraping_ai_api_key: str = ""        # optional; without it reviews are skipped
-
-    # --- Chat with the shop: WhatsApp via Twilio (see app/tools/chat.py) ---
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_whatsapp_number: str = "+14155238886"  # Twilio's shared WhatsApp sandbox number
-    default_target_number: str = ""         # used when a shop has no phone number, e.g. +919876543210
-    force_target_number: str = ""           # testing: message THIS number instead of the shop's, e.g. your own phone
-
-    # --- Langfuse: prompts (app/prompts.py) + tracing (app/telemetry.py) ---
-    langfuse_public_key: str                # required: every prompt is loaded from Langfuse
-    langfuse_secret_key: str                # required
-    langfuse_host: str = "https://cloud.langfuse.com"  # US projects: https://us.cloud.langfuse.com
-    langfuse_prompt_label: str = "production"  # which prompt version to use
-    langfuse_tracing: bool = True           # false = do not send traces (e.g. on your laptop)
-    service_name: str = "place-discover-agent"
-    deployment_environment: str = "local"
-
-    # --- Optional: also save traces as files in a Google Drive folder (app/drive_export.py) ---
-    drive_traces: bool = False              # true = save traces to Drive (log in first: scripts/google_drive_login.py)
-    drive_folder_name: str = "place-discover-traces"
-
-    log_level: str = "INFO"
+ROOT = Path(__file__).resolve().parent.parent
+# dotenv_values reads the file without exporting it, so unrelated keys in .env
+# (LangSmith, Langfuse, ...) are not switched on by this app.
+_env = dotenv_values(ROOT / '.env')
 
 
-settings = Settings()
+def _get(name, default=''):
+    return os.environ.get(name) or _env.get(name) or default
+
+
+# Everything the app remembers between runs (agent memory + chat history) lives in this one folder.
+DATA_DIR = Path(_get('SCOUT_DATA_DIR') or ROOT / 'data')
+
+GROQ_API_KEY = _get('GROQ_API_KEY')
+LLM_MODEL = _get('LLM_MODEL', 'openai/gpt-oss-120b')
+LLM_REASONING_EFFORT = _get('LLM_REASONING_EFFORT', 'low')
