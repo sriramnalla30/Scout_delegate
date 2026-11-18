@@ -4,7 +4,8 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+# libatomic1: the node that ships with Playwright needs it before it can install anything
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libatomic1 && rm -rf /var/lib/apt/lists/*
 
 # Python packages, then the headless Chromium that geocode uses (with the system libraries it needs)
 COPY requirements.txt .
