@@ -1,52 +1,45 @@
-"""
-Settings for the whole app (API keys, phone numbers, model name).
+import os
+from pathlib import Path
 
-Values are read from the `.env` file in the project root (copy `.env.example`).
-Environment variable names are case-insensitive: GROQ_API_KEY -> settings.groq_api_key
+from dotenv import dotenv_values
 
-Use anywhere with:
-    from app.config import settings
-"""
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    # extra="ignore" -> keys in .env that are not listed below are simply skipped
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-
-    # --- LLM (Groq) ---
-    groq_api_key: str                       # required
-    groq_api_key_2: str = ""                # optional; the router node uses it to spread rate limits
-    llm_model: str = "openai/gpt-oss-120b"  # check available ones: https://console.groq.com/docs/models
-
-    # --- Place search (SerpStack) ---
-    serp_api_key: str                       # required
-    serp_api_url: str = "https://api.serpstack.com/search"
-
-    # --- Review scraping (WebScraping.AI) ---
-    webscraping_ai_api_key: str = ""        # optional; without it reviews are skipped
-
-    # --- Chat with the shop: WhatsApp via Twilio (see app/tools/chat.py) ---
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_whatsapp_number: str = "+14155238886"  # Twilio's shared WhatsApp sandbox number
-    default_target_number: str = ""         # used when a shop has no phone number, e.g. +919876543210
-    force_target_number: str = ""           # testing: message THIS number instead of the shop's, e.g. your own phone
-
-    # --- Langfuse: prompts (app/prompts.py) + tracing (app/telemetry.py) ---
-    langfuse_public_key: str                # required: every prompt is loaded from Langfuse
-    langfuse_secret_key: str                # required
-    langfuse_host: str = "https://cloud.langfuse.com"  # US projects: https://us.cloud.langfuse.com
-    langfuse_prompt_label: str = "production"  # which prompt version to use
-    langfuse_tracing: bool = True           # false = do not send traces (e.g. on your laptop)
-    service_name: str = "place-discover-agent"
-    deployment_environment: str = "local"
-
-    # --- Optional: also save traces as files in a Google Drive folder (app/drive_export.py) ---
-    drive_traces: bool = False              # true = save traces to Drive (log in first: scripts/google_drive_login.py)
-    drive_folder_name: str = "place-discover-traces"
-
-    log_level: str = "INFO"
+ROOT = Path(__file__).resolve().parent.parent
+# dotenv_values reads the file without exporting it, so unrelated keys in .env
+# (LangSmith, Langfuse, ...) are not switched on by this app.
+_env = dotenv_values(ROOT / '.env')
 
 
-settings = Settings()
+def _get(name, default=''):
+    return os.environ.get(name) or _env.get(name) or default
+
+
+# Everything the app remembers between runs (agent memory + chat history) lives in this one folder.
+DATA_DIR = Path(_get('SCOUT_DATA_DIR') or ROOT / 'data')
+
+GROQ_API_KEY = _get('GROQ_API_KEY')
+LANGFUSE_PUBLIC_KEY = _get('LANGFUSE_PUBLIC_KEY')
+LANGFUSE_SECRET_KEY = _get('LANGFUSE_SECRET_KEY')
+LANGFUSE_BASE_URL = _get('LANGFUSE_BASE_URL') or _get('LANGFUSE_HOST') or 'https://cloud.langfuse.com'
+# Tracing is on when both keys exist; set LANGFUSE_TRACING=false to switch it off without removing them.
+LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and _get('LANGFUSE_TRACING', 'true').lower() != 'false'
+LLM_MODEL = _get('LLM_MODEL', 'openai/gpt-oss-120b')
+LLM_REASONING_EFFORT = _get('LLM_REASONING_EFFORT', 'low')
+
+# The Google Maps search tool: the gosom google-maps-scraper binary ("gmaps"), run in fast mode.
+GMAPS_BIN = Path(_get('GMAPS_BIN') or ROOT / 'bin' / ('gmaps.exe' if os.name == 'nt' else 'gmaps'))
+GMAPS_TIMEOUT = int(_get('GMAPS_TIMEOUT', '90'))              # seconds one scrape may take
+GMAPS_PARALLEL = int(_get('GMAPS_PARALLEL', '1'))             # scrapes that may run at once (be gentle with Google)
+GMAPS_QUEUE_WAIT = int(_get('GMAPS_QUEUE_WAIT', '120'))       # seconds a search waits for a free slot
+# The same search (query, pin, radius, language) inside this many minutes reuses the stored result. 0 switches it off.
+SEARCH_CACHE_MINUTES = int(_get('SEARCH_CACHE_MINUTES', '30'))
+
+# Hosting. Locally the app listens on 127.0.0.1:8000 and serves its own page. Deployed (see docs/DEPLOYMENT.md) the page can live on another site.
+HOST = _get('HOST', '127.0.0.1')
+PORT = int(_get('PORT', '8000'))
+# Other sites whose pages may call this API from a browser, comma separated, for example https://ramplacesearch.netlify.app
+ALLOWED_ORIGINS = [o.strip().rstrip('/') for o in _get('ALLOWED_ORIGINS').split(',') if o.strip()]
+# 'shared': every visitor sees the same chat history (one person on their own machine).
+# 'per_browser': each browser sees only the chats it started (a public deployment).
+CHAT_SCOPE = _get('CHAT_SCOPE', 'shared')
+# Messages one visitor (by address) may send per hour. 0 means no limit. Protects the model key on a public deployment.
+CHAT_RATE_PER_HOUR = int(_get('CHAT_RATE_PER_HOUR', '0'))

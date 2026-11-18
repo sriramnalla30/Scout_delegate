@@ -1,31 +1,28 @@
-# Deploy the whole app (API + web page) to Render.com as one web service.
+# Render blueprint for the API. See docs/DEPLOYMENT.md for the steps, the memory limit and the paid settings.
 services:
   - type: web
-    name: place-discover-agent
-    runtime: python
-    plan: free
-    branch: main
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    name: scout-place-finder
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: first_half
+    plan: free                # free: 512 MB, sleeps after 15 minutes idle, no disk (chats are lost on restart).
+                              # For steady use: plan: standard (2 GB, the geocode step peaks near 900 MB) and the disk below.
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # disk:                   # paid plans only: keeps chats and the agent's memory across restarts
+    #   name: scout-data
+    #   mountPath: /data
+    #   sizeGB: 1
     envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://ramplacesearch.netlify.app
+      - key: CHAT_RATE_PER_HOUR
+        value: 40
       - key: GROQ_API_KEY
         sync: false
-      - key: GROQ_API_KEY_2
-        sync: false
-      - key: SERP_API_KEY
-        sync: false
-      - key: WEBSCRAPING_AI_API_KEY
-        sync: false
-      - key: DEFAULT_TARGET_NUMBER
-        sync: false
-      # Langfuse: every prompt is loaded from it, and traces are sent to it
       - key: LANGFUSE_PUBLIC_KEY
         sync: false
       - key: LANGFUSE_SECRET_KEY
         sync: false
-      - key: LANGFUSE_HOST
+      - key: LANGFUSE_BASE_URL
         sync: false
-      - key: DEPLOYMENT_ENVIRONMENT
-        value: production
-    autoDeploy: true

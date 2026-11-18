@@ -1,10 +1,1 @@
-"""
-Place Discover Agent - finds local places, reads their reviews, and negotiates prices by WhatsApp chat.
-
-    main.py     -> web server (API endpoints)
-    config.py   -> settings from .env
-    llm.py      -> creates the Groq LLM
-    schemas.py  -> shapes of request bodies
-    agent/      -> the LangGraph agent
-    tools/      -> SerpStack, review scraping, message
-"""
+"""Scout place finder: a coordinator agent that runs a place search with tools and a scout sub-agent."""

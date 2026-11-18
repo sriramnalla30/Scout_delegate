@@ -1,0 +1,78 @@
+SEARCH_AGENT_2 - SERVERS: HOW TO RUN THEM
+==========================================
+Root: D:\AI_Projects\Search_Agent_2
+Shell: PowerShell. Start each server in its own terminal (they all block).
+
+
+1) SCOUT APP  (the thing under test)            http://127.0.0.1:8000
+------------------------------------------------------------------
+What: FastAPI server (server-sent events) + chat UI. A LangGraph coordinator
+      agent asks for business type / area / city (ask_user), then calls the
+      scout sub-agent, which geocodes the area through Google Maps in headless
+      Chromium, then searches Google Maps with the gosom scraper (gmaps.exe)
+      and returns what it found. The chat shows every place with all its data.
+      Runs on Groq, traced to Langfuse.
+Needs: .env with GROQ_API_KEY (+ LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY /
+       LANGFUSE_BASE_URL, optional). .venv already exists. First time only:
+       .\.venv\Scripts\python.exe -m playwright install chromium
+
+  cd D:\AI_Projects\Search_Agent_2\Place_Discover_Negotiating-AGENT
+  .\.venv\Scripts\python.exe -m app.server
+
+Terminal alternative (no web UI):
+  .\.venv\Scripts\python.exe cli.py
+
+Optional env: LLM_MODEL (default openai/gpt-oss-120b), LLM_REASONING_EFFORT
+(default low), SCOUT_MAPS_PARALLEL (default 4), LANGFUSE_TRACING=false.
+Search tool: the scraper binary is Place_Discover_Negotiating-AGENT\bin\gmaps.exe
+(set GMAPS_BIN to use another path). GMAPS_TIMEOUT (90 s), GMAPS_PARALLEL (1),
+SEARCH_CACHE_MINUTES (30: the same search inside that time reuses stored results;
+0 switches it off). Results are stored in data\searches\<search id>.json.
+
+
+2) SCOUT SIMULATOR  (fake user that drives the app)   http://127.0.0.1:8100
+------------------------------------------------------------------
+What: FastAPI server. Dashboard of 10 test cases (5 happy flow, 5 ambiguity),
+      a run page that is a copy of the app's UI where a fake user types and
+      is checked, an All runs page and a Timeline page. Forwards /api/chat to
+      the app, so START THE SCOUT APP FIRST. Spends real model quota.
+Needs: the app running on port 8000 (override with APP_URL). Uses the app's
+       .venv python (has fastapi, uvicorn, httpx).
+
+  cd D:\AI_Projects\Search_Agent_2\simulator
+  .\start.ps1
+
+Optional env: APP_URL (default http://127.0.0.1:8000), SIM_PORT (default 8100).
+
+
+3) MAPS SCRAPER LAB  (dashboard for gosom google-maps-scraper)  http://127.0.0.1:8765
+------------------------------------------------------------------
+What: Standard-library Python HTTP server, no packages or API key. Runs the
+      scraper in fast mode (max 20 places per list query, needs a lat/lng pin),
+      shows places, phone checks, attribute coverage, raw JSON, saved runs.
+Needs: scraper binary gmaps.exe. It is NOT at this server's default path
+       D:\AI_Projects\Search_Agent_2\test_check\bin\gmaps.exe. A copy is in the
+       scout app; point this server at it before starting:
+         $env:GMAPS_BIN = "D:\AI_Projects\Search_Agent_2\Place_Discover_Negotiating-AGENT\bin\gmaps.exe"
+
+  cd D:\AI_Projects\Search_Agent_2\SAMPLE_TEST_DASHBOARDS
+  python server.py            # or .\start.ps1
+  python server.py --port 8766   # if 8765 is busy
+
+
+NOT SERVERS (command-line tools, run on demand)
+------------------------------------------------------------------
+Offline tests (no model, no network):
+  cd D:\AI_Projects\Search_Agent_2\Place_Discover_Negotiating-AGENT
+  .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+Live scenarios (calls Groq):
+  .\.venv\Scripts\python.exe tests\live_scenarios.py
+Scout-fields eval (D:\AI_Projects\Search_Agent_2\evals suit\scout_fields):
+  python run_eval.py [--limit N]
+  python pull_scout_calls.py | sync_prompts.py | compare.py
+
+
+START ORDER
+------------------------------------------------------------------
+1. Scout app (8000)  ->  2. Simulator (8100)  ->  3. Maps Scraper Lab (8765, independent)
+Stop any of them with Ctrl+C in its terminal.
