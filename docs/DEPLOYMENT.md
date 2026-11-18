@@ -10,6 +10,20 @@ browser ──> Netlify  ramplacesearch.netlify.app      the chat page only (sta
 
 The page is a complete static site (`static/`). The API serves the same page too, so the Render address also works on its own.
 
+## What is deployed now
+
+| | Page | API |
+|---|---|---|
+| Where | Netlify site `ramplacesearch` (id `4f987fc4-dc95-40e2-b234-d2e1ea29c400`) | Render service `scout-place-finder` (id `srv-dbukrvhsrm7s73f6nun0`), Docker, free plan, Singapore |
+| Address | https://ramplacesearch.netlify.app | https://scout-place-finder.onrender.com |
+| Follows | this repo, branch `first_half`, publish `static`, command `node scripts/write-config.mjs` | this repo, branch `first_half`, auto-deploy on push |
+| Settings | `SCOUT_API_BASE` | see the table below |
+
+When `first_half` is merged into `main`, change the branch in both places (Netlify: Site configuration, Build and deploy, Branches; Render: Settings, Branch).
+The old service `PlaceDiscoverAgent` (Render, Python, repo `PlaceDiscoverAgent`) was the backend of the earlier page. It is not used any more and can be deleted.
+
+Measured on the free plan: the first search takes about 50 seconds (geocode about 40 s because the free instance has a fraction of a CPU, the search 2 s, the model calls the rest) and fits in 512 MB.
+
 ## What is where
 
 | Piece | File | Used by |
@@ -41,7 +55,8 @@ Other keys in `.env` (Twilio, SerpAPI, Tavily, the evals' Gemini key) are not re
 
 ## Limits to know
 
-- **Memory.** The geocode step starts Chromium: about 900 MB while it runs (measured on Windows, as the working set of Python plus Chromium). The free and starter plans have 512 MB, the `standard` plan 2 GB. `SCOUT_MAPS_PARALLEL=1` keeps it to one lookup at a time. If the free service runs out of memory, Render restarts it and the chat shows an error: move to `standard`.
+- **Memory.** The geocode step starts Chromium: about 900 MB while it runs on Windows (working set of Python plus Chromium), yet it completed on the free plan's 512 MB on Linux. `SCOUT_MAPS_PARALLEL=1` keeps it to one lookup at a time. If the service ever runs out of memory, Render restarts it and the chat shows an error: move to the `standard` plan (2 GB).
+- **The model's refusals.** Groq sometimes refuses a reply with `tool_use_failed` when the model writes its final report as text. `app/llm.py` recovers that report (see `tests/test_llm.py`); a failed chat turn is written to the service log with its cause.
 - **Speed.** A first search takes about 30 to 60 seconds (geocode about 20 s, the search 3 s, the model calls). A repeated search is faster (the stored result is reused for 30 minutes).
 - **Disk.** Without the `/data` disk (paid plans only), chats and the agent's memory are lost whenever the service restarts or sleeps and wakes. The free plan also sleeps after 15 minutes idle: the first request after that waits about a minute.
 - **No sign-in.** A browser id keeps histories apart, but anyone can open the page. The hourly message limit is the guard on the model key.
