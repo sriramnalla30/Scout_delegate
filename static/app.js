@@ -3,6 +3,10 @@ const $ = s => document.querySelector(s);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const EXAMPLES = ['I want gyms in Koramangala Bangalore', 'Find cafes in Indiranagar', 'Best pharmacies near me', 'Hospitals in Hyderabad'];
 const newId = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now()) + Math.random().toString(16).slice(2));
+// The API may live on another site (config.js). Each browser has an id of its own, so a hosted deployment keeps its chat history apart from other visitors'.
+const API_BASE = (window.SCOUT_API_BASE || '').replace(/\/$/, '');
+const CLIENT_ID = (() => { try { let id = localStorage.getItem('scout_client_id'); if (!id) { id = newId() + newId(); localStorage.setItem('scout_client_id', id); } return id; } catch (e) { return newId() + newId(); } })();
+const api = (path, options = {}) => fetch(API_BASE + path, { ...options, headers: { ...(options.headers || {}), 'X-Client-Id': CLIENT_ID } });
 let threadId = newId(), waiting = false, busy = false, typingEl = null, locked = false;
 // Live events are revealed one at a time so a person can follow them; reopening a saved chat skips the pacing.
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -14,10 +18,10 @@ let live = false, queue = [], draining = null;
 // The server stores them as files in its data folder; `chats` holds only the summaries for the sidebar.
 const MAX_LOG = 300;
 let chats = [], current = null;
-async function loadChats() { try { chats = await (await fetch('/api/chats')).json(); } catch (e) { chats = []; } renderHistory(); }
+async function loadChats() { try { chats = await (await api('/api/chats')).json(); } catch (e) { chats = []; } renderHistory(); }
 function save() {
   if (!current) return;
-  fetch('/api/chats/' + current.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  api('/api/chats/' + current.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title: current.title, updated: current.updated, log: current.log }) }).catch(() => { /* offline: the chat stays on screen but is not saved */ });
 }
 function ago(t) { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : new Date(t).toLocaleDateString(); }
@@ -61,9 +65,9 @@ function beginRename(row, c) {
 async function renameChat(id, title) {
   title = title.trim().slice(0, 80); if (!title) return;
   try {
-    const chat = current && current.id === id ? current : await (await fetch('/api/chats/' + id)).json();
+    const chat = current && current.id === id ? current : await (await api('/api/chats/' + id)).json();
     chat.title = title;
-    const r = await fetch('/api/chats/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, updated: chat.updated, log: chat.log }) });
+    const r = await api('/api/chats/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, updated: chat.updated, log: chat.log }) });
     if (!r.ok) return;
     const summary = chats.find(c => c.id === id); if (summary) summary.title = title;
   } catch (e) { /* the old name stays */ }
@@ -74,16 +78,16 @@ function setDrawer(open) {
   if (open) { $('#hist-search').value = ''; renderHistory(); $('#hist-search').focus(); } else $('#open-history').focus();
 }
 async function removeChat(id) {
-  try { await fetch('/api/chats/' + id, { method: 'DELETE' }); } catch (e) { return; }
+  try { await api('/api/chats/' + id, { method: 'DELETE' }); } catch (e) { return; }
   chats = chats.filter(c => c.id !== id); if (id === threadId) reset(); else renderHistory();
 }
 async function openChat(id) {
   if (busy) return;
-  let chat; try { const r = await fetch('/api/chats/' + id); if (!r.ok) throw Error(); chat = await r.json(); } catch (e) { return; }
+  let chat; try { const r = await api('/api/chats/' + id); if (!r.ok) throw Error(); chat = await r.json(); } catch (e) { return; }
   clearScreen(); threadId = id; current = chat; started(); syncSession(); setDrawer(false);
   chat.log.forEach(e => { if (e.u !== undefined) { addUser(e.u); thinkReset(); think('Reading your message', short(e.u, 120)); } else handle(e.ev); });
   thinkDone(); hideTyping();
-  try { const s = await (await fetch('/api/thread/' + id)).json(); locked = !s.exists; waiting = !!s.waiting; } catch (e) { locked = true; }
+  try { const s = await (await api('/api/thread/' + id)).json(); locked = !s.exists; waiting = !!s.waiting; } catch (e) { locked = true; }
   setBusy(false); renderHistory();
 }
 
@@ -230,7 +234,7 @@ async function send(text) {
   if (waiting) think('You answered, so I\'m handing it back to the scout agent', short(text, 100));
   else { thinkReset(); think('Reading your message', short(text, 120)); }
   try {
-    const resp = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: threadId, message: text }) });
+    const resp = await api('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: threadId, message: text }) });
     if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw Error(e.error || 'The server rejected the message.'); }
     const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {

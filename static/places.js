@@ -191,7 +191,7 @@ function build(host, doc) {
 async function render(host, searchId) {
   host.replaceChildren(el('div', 'Loading the results…', 'pl-loading'));
   try {
-    const r = await fetch('/api/searches/' + encodeURIComponent(searchId));
+    const r = await fetch(((window.SCOUT_API_BASE || '').replace(/\/$/, '')) + '/api/searches/' + encodeURIComponent(searchId));
     if (!r.ok) throw Error(r.status === 404 ? 'These results are no longer stored on this machine.' : 'The results could not be loaded.');
     build(host, await r.json());
   } catch (e) { host.replaceChildren(el('div', e.message || 'The results could not be loaded.', 'pl-loading warn')); }

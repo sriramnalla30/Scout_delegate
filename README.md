@@ -43,12 +43,15 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 | `app/coordinator.py` | The coordinator agent, the pause/resume logic and the event stream. |
 | `app/tools.py` | `ask_user`, `geocode`, `search_places`, `scout_agent`. |
 | `app/scout_agent.py` | The scout sub-agent, its `Report` output schema, and `complete()`, the code check on a ready report. |
+| `app/access.py` | Who may call the API: other sites, one chat history per browser, a message limit. |
 | `app/gmaps.py` | Runs the scraper binary (the only file that knows about it). |
 | `app/places.py` | The place model: scraper record to place, scores, opening hours, phone kinds, summary, data coverage. Pure functions. |
 | `app/searches.py` | Stored searches (one JSON file each in `data/searches/`), reuse of recent identical searches, and `perform()`. |
 | `static/places.js`, `static/places.css` | The results view: summary, picks, sort and filters, one card per place, CSV and JSON download. |
+| `static/config.js` | Where the API is (empty = the same site). Written at build time when the page is hosted elsewhere. |
+| `Dockerfile`, `render.yaml`, `netlify.toml`, `scripts/write-config.mjs` | Deployment: the API on Render, the page on Netlify. See `docs/DEPLOYMENT.md`. |
 | `app/server.py`, `static/` | FastAPI server (server-sent events) and the chat UI. |
-| `tests/test_offline.py`, `tests/test_search.py` | Offline unit tests (no model, no network, no scraper binary). |
+| `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py` | Offline unit tests (no model, no network, no scraper binary). |
 | `tests/live_scenarios.py` | Five scenarios against the real model. |
 
 ## The search step
@@ -68,6 +71,10 @@ chat page: GET /api/searches/<search id>  ->  summary, picks, sort and filters, 
 - **Data coverage.** For every field Google returned: how many places have it. Fast mode gives about 20 fields per place; photos, price, review text and emails come back empty (the page says so).
 - **Limits.** One search at a time by default (`GMAPS_PARALLEL`), 90 s timeout, results stored per search id (old ones are not deleted yet). Fast mode only reads list searches ("gyms in Koramangala Bangalore") and needs the pin.
 - **Binary.** `bin/gmaps.exe` (git-ignored). Set `GMAPS_BIN` to use another path.
+
+## Deploying
+
+The API runs on Render and the page on Netlify: `docs/DEPLOYMENT.md` has the layout, the settings and the steps.
 
 ## Tests
 

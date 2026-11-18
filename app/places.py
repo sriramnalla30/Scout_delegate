@@ -147,7 +147,7 @@ def live_status(place: dict, now: datetime) -> dict:
     label = ', '.join(f'{_clock(s)}–{_clock(e)}' for s, e in today) if today else 'Closed'
     if today == [[0, 1440]]:
         label = 'Open 24 hours'
-    for s, e in schedule[(weekday - 1) % 7]:  # a range from yesterday that runs past midnight
+    for _start, e in schedule[(weekday - 1) % 7]:  # a range from yesterday that runs past midnight
         if e > 1440 and minute < e - 1440:
             return {'open': True, 'text': f'Open · closes {_clock(e)}', 'today': label}
     for s, e in today:

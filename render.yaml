@@ -1,0 +1,28 @@
+# Render blueprint for the API. See docs/DEPLOYMENT.md for the steps, the memory limit and the paid settings.
+services:
+  - type: web
+    name: scout-place-finder
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: first_half
+    plan: free                # free: 512 MB, sleeps after 15 minutes idle, no disk (chats are lost on restart).
+                              # For steady use: plan: standard (2 GB, the geocode step peaks near 900 MB) and the disk below.
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # disk:                   # paid plans only: keeps chats and the agent's memory across restarts
+    #   name: scout-data
+    #   mountPath: /data
+    #   sizeGB: 1
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://ramplacesearch.netlify.app
+      - key: CHAT_RATE_PER_HOUR
+        value: 40
+      - key: GROQ_API_KEY
+        sync: false
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_BASE_URL
+        sync: false

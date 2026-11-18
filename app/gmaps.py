@@ -38,7 +38,7 @@ def clean_args(query, lat, lng, radius_m=None, lang='en') -> dict:
     try:
         lat, lng = float(lat), float(lng)
     except (TypeError, ValueError):
-        raise SearchError('invalid', 'The search needs a latitude and a longitude.')
+        raise SearchError('invalid', 'The search needs a latitude and a longitude.') from None
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         raise SearchError('invalid', 'The latitude or longitude is outside the map.')
     if radius_m is not None:
@@ -101,7 +101,7 @@ def run(args: dict) -> dict:
             try:
                 proc = subprocess.run(build_command(binary, query_file, out_file, args), cwd=work, capture_output=True, timeout=config.GMAPS_TIMEOUT)
             except subprocess.TimeoutExpired:
-                raise SearchError('timeout', f'Google Maps did not answer within {config.GMAPS_TIMEOUT} seconds.')
+                raise SearchError('timeout', f'Google Maps did not answer within {config.GMAPS_TIMEOUT} seconds.') from None
             log = (proc.stdout + proc.stderr).decode('utf-8', errors='replace')
             raw = out_file.read_text(encoding='utf-8-sig', errors='replace') if out_file.exists() else ''
     finally:
@@ -109,7 +109,7 @@ def run(args: dict) -> dict:
     try:
         places = parse_output(raw)
     except json.JSONDecodeError:
-        raise SearchError('parse', 'The search tool wrote output that could not be read.')
+        raise SearchError('parse', 'The search tool wrote output that could not be read.') from None
     if proc.returncode != 0 and not places:
         raise SearchError('failed', 'The search tool stopped with an error: ' + (_tail(log) or f'exit code {proc.returncode}'))
     return {'places': places, 'elapsed_ms': round((time.monotonic() - started) * 1000)}

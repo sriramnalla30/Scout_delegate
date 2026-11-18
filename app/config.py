@@ -32,3 +32,14 @@ GMAPS_PARALLEL = int(_get('GMAPS_PARALLEL', '1'))             # scrapes that may
 GMAPS_QUEUE_WAIT = int(_get('GMAPS_QUEUE_WAIT', '120'))       # seconds a search waits for a free slot
 # The same search (query, pin, radius, language) inside this many minutes reuses the stored result. 0 switches it off.
 SEARCH_CACHE_MINUTES = int(_get('SEARCH_CACHE_MINUTES', '30'))
+
+# Hosting. Locally the app listens on 127.0.0.1:8000 and serves its own page. Deployed (see docs/DEPLOYMENT.md) the page can live on another site.
+HOST = _get('HOST', '127.0.0.1')
+PORT = int(_get('PORT', '8000'))
+# Other sites whose pages may call this API from a browser, comma separated, for example https://ramplacesearch.netlify.app
+ALLOWED_ORIGINS = [o.strip().rstrip('/') for o in _get('ALLOWED_ORIGINS').split(',') if o.strip()]
+# 'shared': every visitor sees the same chat history (one person on their own machine).
+# 'per_browser': each browser sees only the chats it started (a public deployment).
+CHAT_SCOPE = _get('CHAT_SCOPE', 'shared')
+# Messages one visitor (by address) may send per hour. 0 means no limit. Protects the model key on a public deployment.
+CHAT_RATE_PER_HOUR = int(_get('CHAT_RATE_PER_HOUR', '0'))

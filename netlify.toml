@@ -1,0 +1,18 @@
+# Netlify publishes the chat page (static/) and points it at the API's address. See docs/DEPLOYMENT.md.
+[build]
+  publish = "static"
+  command = "node scripts/write-config.mjs"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/config.js"
+  [headers.values]
+    Cache-Control = "no-cache"

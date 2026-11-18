@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+data
+bin
+tests
+docs
+scripts
+run.txt
+README.md
+__pycache__
+*.pyc
