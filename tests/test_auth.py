@@ -359,5 +359,25 @@ class StoreMoves(unittest.TestCase):
             self.assertTrue((Path(folder) / 'chats' / 'keepme0000000001.json').is_file())
 
 
+class GoogleButtonTellsTheTruth(unittest.TestCase):
+    """A phone opened the page while the hosted API was still waking, tapped Google, and was told 'not set up on this server' although it
+    is. The page code must only say that once the server has answered, ask again when the answer is late, and retry a script that failed."""
+
+    def setUp(self):
+        self.code = (Path(server.STATIC) / 'auth.js').read_text(encoding='utf-8')
+
+    def test_not_set_up_is_said_only_after_the_settings_arrived(self):
+        say = self.code.index("note('Google sign-in is not set up")
+        self.assertIn('if (!configLoaded)', self.code[:say])
+        self.assertIn('configLoaded = true', self.code)
+
+    def test_late_settings_are_asked_for_again_and_never_cached(self):
+        self.assertIn("cache: 'no-store'", self.code)
+        self.assertRegex(self.code, r'tries < \d+\) setTimeout\(\(\) => loadConfig\(tries \+ 1\)')
+
+    def test_a_google_script_that_failed_can_be_loaded_again(self):
+        self.assertRegex(self.code, r'tag\.onerror = \(\) => \{ tag\.remove\(\)')
+
+
 if __name__ == '__main__':
     unittest.main()

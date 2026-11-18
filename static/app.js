@@ -74,7 +74,7 @@ async function renameChat(id, title) {
 function setDrawer(open) {
   $('#drawer').classList.toggle('open', open); $('#drawer').inert = !open; $('#scrim').classList.toggle('show', open);
   $('#open-history').setAttribute('aria-expanded', String(open));
-  if (open) { $('#hist-search').value = ''; renderHistory(); $('#hist-search').focus(); } else $('#open-history').focus();
+  if (open) { $('#hist-search').value = ''; renderHistory(); (matchMedia('(hover:none)').matches ? $('#close-history') : $('#hist-search')).focus(); /* a phone would raise the keyboard over the list */ } else $('#open-history').focus();
 }
 async function removeChat(id) {
   try { await api('/api/chats/' + id, { method: 'DELETE' }); } catch (e) { return; }
@@ -210,8 +210,8 @@ function setBusy(on) {
   busy = on; $('#send').disabled = on || locked; $('#input').disabled = on || locked;
   const hint = $('#composer-hint'); hint.hidden = !((waiting || locked) && !on);
   hint.textContent = locked ? 'This chat has ended. Start a new chat to continue' : 'The coordinator is waiting for your answer';
-  $('#input').placeholder = locked ? 'Start a new chat to ask again…' : waiting ? 'Type your answer…' : 'Ask the coordinator to find a place…';
-  if (!on && !locked) $('#input').focus();
+  $('#input').placeholder = locked ? 'Start a new chat to ask again…' : waiting ? 'Type your answer…' : matchMedia('(max-width:640px)').matches ? 'Find a place…' : 'Ask the coordinator to find a place…';
+  if (!on && !locked && !matchMedia('(hover:none)').matches) $('#input').focus(); // on a phone this would raise the keyboard over the answer
 }
 
 // Events are saved at once but shown through a queue, one step at a time.

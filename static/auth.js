@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const API_BASE = (window.SCOUT_API_BASE || '').replace(/\/$/, '');
 const KEY = 'scout_token', PROFILE = 'scout_profile';
-let token = null, user = null, mode = 'signin', config = { google_client_id: null, min_password: 8 }, handlers = {}, googleReady = false;
+let token = null, user = null, mode = 'signin', config = { google_client_id: null, min_password: 8 }, handlers = {}, googleReady = false, configLoaded = false, googleFailed = false, googleNote = false;
 try { token = localStorage.getItem(KEY); } catch (e) { /* storage blocked: the person signs in again next visit */ }
 function keep(value, person) {
   token = value;
@@ -45,7 +45,7 @@ function loadGoogleScript() {
   return new Promise((resolve, reject) => {
     if (window.google && google.accounts) return resolve();
     const tag = document.createElement('script'); tag.src = 'https://accounts.google.com/gsi/client'; tag.async = true;
-    tag.onload = resolve; tag.onerror = () => reject(new Error('Could not load Google sign-in.')); document.head.append(tag);
+    tag.onload = resolve; tag.onerror = () => { tag.remove(); reject(new Error('Could not load Google sign-in.')); }; document.head.append(tag); // removed on failure so a retry can load it again
   });
 }
 function renderGoogle() {
@@ -55,16 +55,30 @@ function renderGoogle() {
   }
   loadGoogleScript().then(() => {
     if (!googleReady) { google.accounts.id.initialize({ client_id: config.google_client_id, callback: r => finish(post('/api/auth/google', { credential: r.credential })) }); googleReady = true; }
-    slot.replaceChildren();
+    slot.replaceChildren(); googleFailed = false; if (googleNote) { googleNote = false; error(''); }
     google.accounts.id.renderButton(slot, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill', logo_alignment: 'left', width: 320, text: mode === 'signup' ? 'signup_with' : 'continue_with' });
-  }).catch(e => { slot.replaceChildren(fallbackButton()); error(e.message); });
+  }).catch(e => { googleFailed = true; slot.replaceChildren(fallbackButton()); note(e.message); });
 }
 function fallbackButton() {
   const b = document.createElement('button'); b.type = 'button'; b.id = 'google-fallback'; b.className = 'gbtn';
   b.innerHTML = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg><span></span>';
   b.querySelector('span').textContent = mode === 'signup' ? 'Sign up with Google' : 'Continue with Google';
-  b.addEventListener('click', () => error('Google sign-in is not set up on this server yet. Use your email and password.'));
+  // Say the truth about why Google is not there. "Not set up" is only true when the server answered and has no client id.
+  b.addEventListener('click', () => {
+    if (!configLoaded) { note('Still connecting to the server (it may be waking up). Trying again, tap Google in a few seconds.'); loadConfig(); return; }
+    if (googleFailed) { note('Could not load Google sign-in. Check your connection or content blocker. Trying again…'); renderGoogle(); return; }
+    note('Google sign-in is not set up on this server yet. Use your email and password.');
+  });
   return b;
+}
+function note(text) { googleNote = !!text; error(text); } // a message about Google, cleared once Google's button is up
+
+// The settings (Google client id) come from the API. A host that sleeps answers late or fails the first time: ask again a few times.
+function loadConfig(tries = 0) {
+  return fetch(API_BASE + '/api/auth/config', { cache: 'no-store' }).then(r => r.json()).then(c => {
+    config = { ...config, ...c }; configLoaded = true;
+    if (document.body.classList.contains('guest')) renderGoogle();
+  }).catch(() => { if (tries < 6) setTimeout(() => loadConfig(tries + 1), 3000 * (tries + 1)); });
 }
 
 // ---- the two forms
@@ -107,7 +121,7 @@ function init(h) {
   $('#pw-toggle').addEventListener('click', () => { const p = $('#auth-pass'), hide = p.type === 'text'; p.type = hide ? 'password' : 'text'; $('#pw-toggle').textContent = hide ? 'Show' : 'Hide'; });
   // Nothing waits for the server: a hosted API may be asleep for a minute. The screen is drawn at once; Google's button appears when the
   // settings arrive, and a saved sign-in opens the app straight away (the first call that gets a 401 sends the person back here).
-  fetch(API_BASE + '/api/auth/config').then(r => r.json()).then(c => { config = { ...config, ...c }; if (document.body.classList.contains('guest')) renderGoogle(); }).catch(() => { /* the form still works */ });
+  loadConfig(); // if it never arrives the form still works
   const person = token && remembered();
   if (person) { enter(person); request('/api/auth/me').then(r => r.ok ? r.json() : null).then(b => { if (b && b.user) { user = b.user; keep(token, b.user); if (handlers.onProfile) handlers.onProfile(b.user); } }).catch(() => { /* offline: the saved profile stays */ }); return; }
   if (token) keep(null); // a token without a profile (an older page): ask for a fresh sign-in
