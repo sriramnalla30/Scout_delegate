@@ -78,7 +78,8 @@ def sse(event: dict) -> str:
 @router.get('/api/health')
 def health():
     return {'ok': True, 'model': config.LLM_MODEL, 'key_configured': bool(config.GROQ_API_KEY),
-            'langfuse': {'tracing': config.LANGFUSE_ENABLED, 'prompt_versions': observability.prompt_versions()}}
+            'langfuse': {'tracing': config.LANGFUSE_ENABLED, 'environment': config.LANGFUSE_ENVIRONMENT,
+                         'prompt_versions': observability.prompt_versions()}}
 
 
 @router.get('/api/thread/{thread_id}')

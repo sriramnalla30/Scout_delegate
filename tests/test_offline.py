@@ -3,6 +3,7 @@
     python -m unittest discover -s tests -v
 """
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -186,6 +187,34 @@ class Observability(unittest.TestCase):
             observability.sync_prompts()
         self.assertEqual(fake.stored['coordinator'].prompt, load_prompt('coordinator'))
         self.assertEqual(fake.stored['scout-agent'].prompt, load_prompt('scout'))
+
+    def test_traces_are_filed_under_the_configured_environment(self):
+        captured = {}
+
+        class Spy:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def flush(self):
+                pass
+        with mock.patch.multiple(config, LANGFUSE_ENABLED=True, LANGFUSE_PUBLIC_KEY='pk', LANGFUSE_SECRET_KEY='sk',
+                                 LANGFUSE_ENVIRONMENT='production'), \
+                mock.patch('langfuse.Langfuse', Spy), mock.patch('atexit.register'):
+            observability.get_langfuse.__wrapped__()  # the cached function without its cache
+            self.assertEqual(captured['environment'], 'production')
+            self.assertEqual(observability.trace_tags(), ['scout', 'production'])
+            self.assertEqual(observability.trace_tags(True), ['scout', 'production', 'hitl'])
+
+    def test_the_environment_defaults_to_development_and_rejects_names_langfuse_would_refuse(self):
+        import importlib
+        for given, expected in [(None, 'development'), ('Production', 'production'), ('langfuse-x', 'development'), ('a b', 'development')]:
+            env = {} if given is None else {'LANGFUSE_TRACING_ENVIRONMENT': given}
+            with mock.patch.dict('os.environ', env, clear=False):
+                if given is None:
+                    os.environ.pop('LANGFUSE_TRACING_ENVIRONMENT', None)
+                reloaded = importlib.reload(config)
+                self.assertEqual(reloaded.LANGFUSE_ENVIRONMENT, expected, given)
+        importlib.reload(config)
 
     def test_a_langfuse_outage_does_not_break_startup(self):
         class Down(FakeLangfuse):

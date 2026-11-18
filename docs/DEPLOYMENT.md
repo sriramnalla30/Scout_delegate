@@ -40,6 +40,7 @@ Measured on the free plan: the first search takes about 50 seconds (geocode abou
 |---|---|---|
 | `GROQ_API_KEY` | Render | the model key (required) |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | Render | traces and prompt versions (optional) |
+| `LANGFUSE_TRACING_ENVIRONMENT` | Render (set in the Dockerfile) | `production`: the Environment (and a tag) on every trace and session in Langfuse. Locally it is `development`. `/api/health` shows the value in use |
 | `ALLOWED_ORIGINS` | Render | the Netlify address, so its page may call the API (`https://ramplacesearch.netlify.app`) |
 | `CHAT_SCOPE` | Render (set in the Dockerfile) | `per_browser`: each browser sees only its own chats |
 | `CHAT_RATE_PER_HOUR` | Render | messages one visitor may send an hour (40), so a public page cannot drain the model key |

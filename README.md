@@ -33,6 +33,7 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 
 - **Traces:** one trace per turn, named like "Turn 2 (answer): Indiranagar", with the coordinator's model calls, the `scout_agent` tool, the scout sub-agent nested inside it, and its `geocode` calls, each with model and token usage. Turns of one chat share a Langfuse session (the chat's thread id). A retried model call shows up as an extra generation.
 - **Prompts:** at startup `prompts/coordinator.md` and `prompts/scout.md` are saved as `coordinator` and `scout-agent`, label `production`. A new version is created only when the file text changed. The files stay the source of truth. Each trace records the prompt versions in its metadata.
+- **Environment:** every trace carries a Langfuse environment (and the same word as a tag): `development` on a laptop, `production` on the deployed API (the Dockerfile sets `LANGFUSE_TRACING_ENVIRONMENT=production`). Filter Traces or Sessions by Environment in Langfuse to see only one of them. The prompts' `production` label is a different thing: it is the prompt version the app reads.
 - **Off switch:** `LANGFUSE_TRACING=false`. If Langfuse is unreachable the app runs the same and just skips tracing.
 
 ## Where things are
