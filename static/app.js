@@ -3,10 +3,9 @@ const $ = s => document.querySelector(s);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const EXAMPLES = ['I want gyms in Koramangala Bangalore', 'Find cafes in Indiranagar', 'Best pharmacies near me', 'Hospitals in Hyderabad'];
 const newId = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now()) + Math.random().toString(16).slice(2));
-// The API may live on another site (config.js). Each browser has an id of its own, so a hosted deployment keeps its chat history apart from other visitors'.
-const API_BASE = (window.SCOUT_API_BASE || '').replace(/\/$/, '');
-const CLIENT_ID = (() => { try { let id = localStorage.getItem('scout_client_id'); if (!id) { id = newId() + newId(); localStorage.setItem('scout_client_id', id); } return id; } catch (e) { return newId() + newId(); } })();
-const api = (path, options = {}) => fetch(API_BASE + path, { ...options, headers: { ...(options.headers || {}), 'X-Client-Id': CLIENT_ID } });
+// Every API call goes through auth.js, which adds the signed-in account's token. The API may live on another site (config.js).
+// The server files chats under the account, so a signed-in person only ever sees their own history.
+const api = (path, options) => Auth.fetch(path, options);
 let threadId = newId(), waiting = false, busy = false, typingEl = null, locked = false;
 // Live events are revealed one at a time so a person can follow them; reopening a saved chat skips the pacing.
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -18,7 +17,7 @@ let live = false, queue = [], draining = null;
 // The server stores them as files in its data folder; `chats` holds only the summaries for the sidebar.
 const MAX_LOG = 300;
 let chats = [], current = null;
-async function loadChats() { try { chats = await (await api('/api/chats')).json(); } catch (e) { chats = []; } renderHistory(); }
+async function loadChats() { try { const r = await api('/api/chats'); const list = r.ok ? await r.json() : []; chats = Array.isArray(list) ? list : []; } catch (e) { chats = []; } renderHistory(); }
 function save() {
   if (!current) return;
   api('/api/chats/' + current.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -106,10 +105,9 @@ async function copySession() {
 }
 
 function scrollDown() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
-function started() { $('.chatcol').classList.add('started'); }
-// The right-hand column shows "what Scout can do". The thinking card takes its place only while the coordinator is working:
-// it arrives when a message is sent, and leaves when the coordinator asks the person something or has replied.
-function setThinking(on) { $('.tracecol').classList.toggle('thinking', on); }
+// The right-hand column shows "what Scout can do" only on a fresh page. The first message (or opening a saved chat) swaps it for the
+// "Coordinator is thinking" card, and that card stays for the rest of the chat. A new chat brings "what Scout can do" back.
+function started() { $('.chatcol').classList.add('started'); $('.tracecol').classList.add('thinking'); }
 
 function addUser(text) { started(); const m = el('div', undefined, 'msg user'); m.append(el('div', text, 'bubble')); $('#thread').append(m); scrollDown(); }
 function addBot(text, kind) {
@@ -198,13 +196,13 @@ function handle(ev) {
       } else if (ev.kind === 'tool_result' && /error/.test(ev.content || '')) think('Map lookup failed, trying again or asking', undefined, 'bad');
       break;
     case 'interrupt':
-      hideTyping(); waiting = true; think('Paused. Waiting for your answer', undefined, 'ask'); setThinking(false); return addBot(ev.question, 'ask');
+      hideTyping(); waiting = true; think('Paused. Waiting for your answer', undefined, 'ask'); return addBot(ev.question, 'ask');
     case 'message':
-      hideTyping(); think('Done. Replying to you'); thinkDone(); setThinking(false); return addBot(ev.text);
+      hideTyping(); think('Done. Replying to you'); thinkDone(); return addBot(ev.text);
     case 'error':
-      hideTyping(); started(); { const m = el('div', undefined, 'msg err'); m.append(el('div', ev.message, 'bubble')); $('#thread').append(m); } think('Something went wrong', ev.message, 'bad'); thinkDone(); setThinking(false); break;
+      hideTyping(); started(); { const m = el('div', undefined, 'msg err'); m.append(el('div', ev.message, 'bubble')); $('#thread').append(m); } think('Something went wrong', ev.message, 'bad'); thinkDone(); break;
     case 'done':
-      hideTyping(); waiting = !!ev.waiting; thinkDone(); setThinking(false); break;
+      hideTyping(); waiting = !!ev.waiting; thinkDone(); break;
   }
 }
 
@@ -233,7 +231,7 @@ async function drain() {
 async function send(text) {
   if (busy || locked || !text.trim()) return;
   record({ u: text }, text); renderHistory();
-  addUser(text); $('#input').value = ''; autosize(); setBusy(true); showTyping(); setThinking(true);
+  addUser(text); $('#input').value = ''; autosize(); setBusy(true); showTyping();
   if (waiting) think('You answered, so I\'m handing it back to the scout agent', short(text, 100));
   else { thinkReset(); think('Reading your message', short(text, 120)); }
   try {
@@ -247,14 +245,14 @@ async function send(text) {
     }
   } catch (e) { onEvent({ type: 'error', message: e.message || 'Could not reach the server.' }); onEvent({ type: 'done', waiting: false }); }
   while (draining) await draining;  // let the last steps finish appearing before the box unlocks
-  setThinking(false); save(); renderHistory(); setBusy(false);
+  save(); renderHistory(); setBusy(false);
 }
 
 function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
 function clearScreen() {
   waiting = false; busy = false; locked = false; queue.length = 0; hideTyping();
   $('#thread').replaceChildren();
-  $('.chatcol').classList.remove('started'); setThinking(false); thinkReset();
+  $('.chatcol').classList.remove('started'); $('.tracecol').classList.remove('thinking'); thinkReset();
 }
 function reset() {
   clearScreen(); threadId = newId(); current = null; syncSession(); setBusy(false); renderHistory(); window.scrollTo({ top: 0 });
@@ -271,6 +269,28 @@ $('#close-history').addEventListener('click', () => setDrawer(false));
 $('#scrim').addEventListener('click', () => setDrawer(false));
 $('#drawer-new').addEventListener('click', () => { reset(); setDrawer(false); });
 $('#hist-search').addEventListener('input', renderHistory);
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#drawer').classList.contains('open') && !e.target.classList.contains('rename')) setDrawer(false); });
-setBusy(false); loadChats();
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.target.classList.contains('rename')) return;
+  if (!$('#profile-menu').hidden) setProfileMenu(false); else if ($('#drawer').classList.contains('open')) setDrawer(false);
+});
+
+// ---- the signed-in person: profile in the history drawer, and what happens when they sign in or out
+const METHODS = { password: 'Email and password', google: 'Google' };
+function renderProfile(person) {
+  const initial = (person.name || person.email || '?').trim().charAt(0);
+  $('#avatar').textContent = initial; $('#pname').textContent = person.name; $('#pemail').textContent = person.email;
+  $('#pm-name').textContent = person.name; $('#pm-email').textContent = person.email;
+  $('#pm-method').textContent = (person.methods || []).map(m => METHODS[m] || m).join(' + ') || '-';
+  $('#pm-since').textContent = new Date((person.created || 0) * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function setProfileMenu(open) { $('#profile-menu').hidden = !open; $('#profile-btn').setAttribute('aria-expanded', String(open)); }
+function signedIn(person) { // a fresh screen for this account, so nothing from a previous account can show
+  renderProfile(person); setProfileMenu(false); setDrawer(false); chats = []; current = null; threadId = newId();
+  clearScreen(); syncSession(); setBusy(false); loadChats(); window.scrollTo({ top: 0 });
+}
+function signedOut() { chats = []; current = null; threadId = newId(); clearScreen(); syncSession(); setDrawer(false); setProfileMenu(false); $('#hist').replaceChildren(); }
+$('#profile-btn').addEventListener('click', () => setProfileMenu($('#profile-menu').hidden));
+$('#logout').addEventListener('click', () => Auth.logout());
+document.addEventListener('click', e => { if (!$('#profile-menu').hidden && !$('#profile').contains(e.target)) setProfileMenu(false); });
+setBusy(false); Auth.init({ onSignIn: signedIn, onSignOut: signedOut, onProfile: renderProfile });
 })();

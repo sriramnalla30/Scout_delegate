@@ -22,6 +22,11 @@ Needs: .env with GROQ_API_KEY (+ LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY /
 Terminal alternative (no web UI):
   .\.venv\Scripts\python.exe cli.py
 
+Sign-in: everyone signs in (email + password, or Google). Each account sees only its own chats.
+On this laptop the accounts come from SEED_USERS in .env (created at startup; LEGACY_CHATS_OWNER
+receives the chats saved before accounts existed). After pulling this version run once:
+  .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
 Optional env: LLM_MODEL (default openai/gpt-oss-120b), LLM_REASONING_EFFORT
 (default low), SCOUT_MAPS_PARALLEL (default 4), LANGFUSE_TRACING=false.
 Search tool: the scraper binary is Place_Discover_Negotiating-AGENT\bin\gmaps.exe
