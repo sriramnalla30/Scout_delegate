@@ -82,4 +82,5 @@
 .report{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px}
 .report>summary{cursor:pointer;font:500 12.5px var(--sans);color:var(--brand-deep);padding:4px 0}
 
+@media(max-width:560px){.pl-kpis{grid-template-columns:1fr 1fr}.pl-kpis>:last-child:nth-child(odd){grid-column:1/-1}.pl-btn{padding:9px 15px}.pl-chip{padding:8px 13px}.pl-card{padding:14px}.pl-top{padding:14px}}
 @media(max-width:560px){.pl-two{grid-template-columns:1fr}.pl-head{flex-wrap:wrap}.pl-live{margin-left:40px}.pl-covgrid{grid-template-columns:1fr 1fr 48px}}

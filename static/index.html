@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
 <title>Scout · Place finder</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2318aa7e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='1.8' fill='white'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/places.css"><link rel="stylesheet" href="/auth.css"><script defer src="/config.js"></script><script defer src="/places.js"></script><script defer src="/auth.js"></script><script defer src="/app.js"></script></head>
@@ -72,7 +72,7 @@
     <form id="composer" class="composer" autocomplete="off">
       <div id="composer-hint" class="hint" hidden></div>
       <div class="row"><textarea id="input" rows="1" maxlength="1000" placeholder="Ask the coordinator to find a place…" aria-label="Message"></textarea>
-      <button id="send" class="btn" type="submit">Send</button></div>
+      <button id="send" class="btn" type="submit" aria-label="Send">Send</button></div>
     </form>
   </section>
 
@@ -129,6 +129,6 @@
       <ol class="think" id="think"><li class="idle"><i></i><div><span>Send a message and the coordinator's decisions show up here, step by step.</span></div></li></ol>
     </div>
   </aside>
+  <button id="copy-session" class="sessbtn" type="button" hidden>Copy session ID</button>
 </main>
-<button id="copy-session" class="sessbtn" type="button" hidden>Copy session ID</button>
 </body></html>
