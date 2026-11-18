@@ -51,7 +51,7 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 | `static/config.js` | Where the API is (empty = the same site). Written at build time when the page is hosted elsewhere. |
 | `Dockerfile`, `render.yaml`, `netlify.toml`, `scripts/write-config.mjs` | Deployment: the API on Render, the page on Netlify. See `docs/DEPLOYMENT.md`. |
 | `app/server.py`, `static/` | FastAPI server (server-sent events) and the chat UI. |
-| `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py` | Offline unit tests (no model, no network, no scraper binary). |
+| `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py`, `tests/test_llm.py` | Offline unit tests (no model, no network, no scraper binary). |
 | `tests/live_scenarios.py` | Five scenarios against the real model. |
 
 ## The search step

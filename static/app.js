@@ -106,7 +106,8 @@ async function copySession() {
 }
 
 function scrollDown() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
-function started() { $('.chatcol').classList.add('started'); }
+// Once a chat has begun, the hero goes away and the right-hand "what Scout can do" panel gives way to the thinking card.
+function started() { $('.chatcol').classList.add('started'); $('.tracecol').classList.add('started'); }
 
 function addUser(text) { started(); const m = el('div', undefined, 'msg user'); m.append(el('div', text, 'bubble')); $('#thread').append(m); scrollDown(); }
 function addBot(text, kind) {
@@ -251,7 +252,7 @@ function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.he
 function clearScreen() {
   waiting = false; busy = false; locked = false; queue.length = 0; hideTyping();
   $('#thread').replaceChildren();
-  $('.chatcol').classList.remove('started'); thinkReset();
+  $('.chatcol').classList.remove('started'); $('.tracecol').classList.remove('started'); thinkReset();
 }
 function reset() {
   clearScreen(); threadId = newId(); current = null; syncSession(); setBusy(false); renderHistory(); window.scrollTo({ top: 0 });

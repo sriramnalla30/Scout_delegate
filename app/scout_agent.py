@@ -7,7 +7,7 @@ from langchain.agents.structured_output import ToolStrategy
 from pydantic import BaseModel, Field
 
 from app import gmaps, searches
-from app.llm import get_llm, retry_middleware
+from app.llm import get_llm, recover_structured_reply, retry_middleware
 from app.prompts import load_prompt
 from app.tools import geocode, search_places
 
@@ -121,4 +121,4 @@ def get_scout_agent():
     # ToolStrategy returns the structured result as a tool call. Groq rejects its JSON mode
     # (the automatic choice) when it is combined with other tools such as geocode and search_places.
     return create_agent(get_llm('Scout agent: model call'), tools=[geocode, search_places], system_prompt=load_prompt('scout'),
-                        response_format=ToolStrategy(Report), middleware=[retry_middleware()], name='Scout agent')
+                        response_format=ToolStrategy(Report), middleware=[retry_middleware(), recover_structured_reply()], name='Scout agent')  # the second sits inside the first
