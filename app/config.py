@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -22,6 +23,11 @@ LANGFUSE_SECRET_KEY = _get('LANGFUSE_SECRET_KEY')
 LANGFUSE_BASE_URL = _get('LANGFUSE_BASE_URL') or _get('LANGFUSE_HOST') or 'https://cloud.langfuse.com'
 # Tracing is on when both keys exist; set LANGFUSE_TRACING=false to switch it off without removing them.
 LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and _get('LANGFUSE_TRACING', 'true').lower() != 'false'
+# The Langfuse environment every trace is filed under (the Environment filter in Langfuse). 'development' on a
+# laptop; the Dockerfile sets 'production' for the deployed API. Langfuse allows lowercase letters, digits, - and _.
+LANGFUSE_ENVIRONMENT = _get('LANGFUSE_TRACING_ENVIRONMENT', 'development').strip().lower()
+if not re.fullmatch(r'(?!langfuse)[a-z0-9_-]{1,40}', LANGFUSE_ENVIRONMENT):
+    LANGFUSE_ENVIRONMENT = 'development'
 LLM_MODEL = _get('LLM_MODEL', 'openai/gpt-oss-120b')
 LLM_REASONING_EFFORT = _get('LLM_REASONING_EFFORT', 'low')
 
@@ -38,8 +44,14 @@ HOST = _get('HOST', '127.0.0.1')
 PORT = int(_get('PORT', '8000'))
 # Other sites whose pages may call this API from a browser, comma separated, for example https://ramplacesearch.netlify.app
 ALLOWED_ORIGINS = [o.strip().rstrip('/') for o in _get('ALLOWED_ORIGINS').split(',') if o.strip()]
-# 'shared': every visitor sees the same chat history (one person on their own machine).
-# 'per_browser': each browser sees only the chats it started (a public deployment).
-CHAT_SCOPE = _get('CHAT_SCOPE', 'shared')
-# Messages one visitor (by address) may send per hour. 0 means no limit. Protects the model key on a public deployment.
+# Messages one visitor (by account) may send per hour. 0 means no limit. Protects the model key on a public deployment.
 CHAT_RATE_PER_HOUR = int(_get('CHAT_RATE_PER_HOUR', '0'))
+
+# Accounts (app/auth.py). Everyone signs in, and each account sees only its own chats.
+# Google sign-in: the OAuth "Web application" client id from Google Cloud Console. Empty hides the working Google button.
+GOOGLE_CLIENT_ID = _get('GOOGLE_CLIENT_ID').strip()
+SESSION_DAYS = int(_get('SESSION_DAYS', '30'))                # how long a sign-in lasts before the person must sign in again
+# Accounts created at startup from "email:password;email:password". For a laptop only: leave it unset on a public deployment.
+SEED_USERS = _get('SEED_USERS')
+# Chats saved before accounts existed (data/chats/*.json) are copied into this account's history, once. Local use only.
+LEGACY_CHATS_OWNER = _get('LEGACY_CHATS_OWNER').strip().lower()

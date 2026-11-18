@@ -1,7 +1,8 @@
 """Web server: serves the chat page and streams the coordinator's steps as server-sent events.
 
 The page can also be hosted elsewhere (static/ is a complete site): it then calls this API across sites, which
-ALLOWED_ORIGINS must name. Who may call what is decided in app/access.py.
+ALLOWED_ORIGINS must name. Who may call what is decided in app/access.py; accounts and sign-in are in app/auth.py.
+Every route except health, the sign-in routes and the page itself needs a signed-in account.
 """
 import asyncio
 import json
@@ -14,18 +15,20 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from app import access, config, observability, places, searches, store
+from app import access, auth, config, observability, places, searches, store
 from app.coordinator import forget_thread, stream_events, thread_state
 
 STATIC = Path(__file__).resolve().parent.parent / 'static'
 FILES = {'/': ('index.html', 'text/html'), '/config.js': ('config.js', 'text/javascript'), '/app.js': ('app.js', 'text/javascript'),
-         '/style.css': ('style.css', 'text/css'), '/places.js': ('places.js', 'text/javascript'), '/places.css': ('places.css', 'text/css')}
+         '/style.css': ('style.css', 'text/css'), '/places.js': ('places.js', 'text/javascript'), '/places.css': ('places.css', 'text/css'),
+         '/auth.js': ('auth.js', 'text/javascript'), '/auth.css': ('auth.css', 'text/css')}
 THREAD_ID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
 logger = logging.getLogger('scout.server')
 
 
 @asynccontextmanager
 async def lifespan(_app):
+    await asyncio.to_thread(auth.startup)  # the laptop's accounts (SEED_USERS) and the history from before accounts existed
     await asyncio.to_thread(observability.sync_prompts)  # save the system prompts in Langfuse (new version only if changed)
     yield
     await asyncio.to_thread(observability.flush)  # do not lose the last traces on shutdown
@@ -34,7 +37,7 @@ async def lifespan(_app):
 router = APIRouter()
 
 
-async def denied(_request: Request, error: access.Denied):
+async def denied(_request: Request, error: access.Denied | auth.AuthError):
     return JSONResponse({'error': error.message}, status_code=error.status)
 
 
@@ -49,10 +52,11 @@ def create_app() -> FastAPI:
     app = FastAPI(title='Scout place finder', docs_url=None, redoc_url=None, lifespan=lifespan)
     app.include_router(router)
     app.add_exception_handler(access.Denied, denied)
+    app.add_exception_handler(auth.AuthError, denied)
     app.middleware('http')(no_store)
     if config.ALLOWED_ORIGINS:
         app.add_middleware(CORSMiddleware, allow_origins=config.ALLOWED_ORIGINS, allow_methods=['GET', 'POST', 'PUT', 'DELETE'],
-                           allow_headers=['Content-Type', 'X-Client-Id'], max_age=600)
+                           allow_headers=['Content-Type', 'Authorization'], max_age=600)
     return app
 
 
@@ -78,19 +82,92 @@ def sse(event: dict) -> str:
 @router.get('/api/health')
 def health():
     return {'ok': True, 'model': config.LLM_MODEL, 'key_configured': bool(config.GROQ_API_KEY),
-            'langfuse': {'tracing': config.LANGFUSE_ENABLED, 'prompt_versions': observability.prompt_versions()}}
+            'langfuse': {'tracing': config.LANGFUSE_ENABLED, 'environment': config.LANGFUSE_ENVIRONMENT,
+                         'prompt_versions': observability.prompt_versions()}}
 
 
+# ---- accounts ----
+async def json_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise access.Denied(400, 'Send a JSON body.')
+    return body
+
+
+def signed_in(user: dict) -> dict:
+    """The answer to a successful sign-in: a new session token for the page to keep, and who the person is."""
+    return {'token': auth.start_session(user['id']), 'user': auth.public(user)}
+
+
+@router.get('/api/auth/config')
+def auth_config():
+    """What the sign-in screen needs: whether the Google button works here (and its client id), and the password rule."""
+    return {'google_client_id': config.GOOGLE_CLIENT_ID or None, 'min_password': auth.MIN_PASSWORD}
+
+
+@router.post('/api/auth/signup')
+async def auth_signup(request: Request):
+    access.check_origin(request)
+    access.limit_signup(request)
+    body = await json_body(request)
+    user = await asyncio.to_thread(auth.signup, body.get('email'), body.get('password'), body.get('name'))
+    return signed_in(user)
+
+
+@router.post('/api/auth/login')
+async def auth_login(request: Request):
+    access.check_origin(request)
+    body = await json_body(request)
+    email = str(body.get('email') or '')
+    access.limit_login(request, email)
+    try:
+        user = await asyncio.to_thread(auth.login, email, body.get('password'))
+    except auth.AuthError:
+        access.login_failed(request, email)
+        raise
+    access.login_ok(request, email)
+    return signed_in(user)
+
+
+@router.post('/api/auth/google')
+async def auth_google(request: Request):
+    access.check_origin(request)
+    access.limit_login(request, 'google')
+    body = await json_body(request)
+    user = await asyncio.to_thread(auth.google_login, body.get('credential'))
+    return signed_in(user)
+
+
+@router.get('/api/auth/me')
+def auth_me(request: Request):
+    return {'user': auth.public(access.current_user(request))}
+
+
+@router.post('/api/auth/logout')
+def auth_logout(request: Request):
+    access.check_origin(request)
+    auth.end_session(access.bearer(request))
+    return {'ok': True}
+
+
+# ---- the signed-in person's own data ----
 @router.get('/api/thread/{thread_id}')
-def thread(thread_id: str):
+def thread(thread_id: str, request: Request):
+    user = access.current_user(request)
     if not THREAD_ID.match(thread_id):
         return JSONResponse({'error': 'Bad thread id.'}, status_code=400)
+    if not auth.owns_thread(thread_id, user['id']):
+        return {'exists': False, 'waiting': False}  # someone else's conversation looks the same as one that does not exist
     return thread_state(thread_id)
 
 
 @router.get('/api/searches/{search_id}')
-def search_get(search_id: str):
+def search_get(search_id: str, request: Request):
     """One stored search as a screen should see it now: places in the app's model, summary, data coverage, live open/closed."""
+    access.current_user(request)
     doc = searches.load(search_id)
     return places.view(doc) if doc else JSONResponse({'error': 'Search not found.'}, status_code=404)
 
@@ -116,9 +193,14 @@ async def chats_put(chat_id: str, request: Request):
         title, updated, log = str(body['title']), float(body['updated']), body['log']
         if not THREAD_ID.match(chat_id) or not isinstance(log, list):
             raise ValueError('bad chat')
-        store.save_chat(chat_id, title, updated, log, owner)
     except (ValueError, KeyError, TypeError):
         return JSONResponse({'error': 'Send {title, updated, log} for a valid chat id.'}, status_code=400)
+    if not auth.claim_thread(chat_id, owner):
+        return JSONResponse({'error': 'Chat not found.'}, status_code=404)  # that id belongs to another account
+    try:
+        store.save_chat(chat_id, title, updated, log, owner)
+    except ValueError:
+        return JSONResponse({'error': 'This chat is too large to save.'}, status_code=400)
     return {'ok': True}
 
 
@@ -128,15 +210,18 @@ def chats_delete(chat_id: str, request: Request):
     owner = access.owner_of(request)
     if not THREAD_ID.match(chat_id):
         return JSONResponse({'error': 'Bad chat id.'}, status_code=400)
-    if store.delete_chat(chat_id, owner) or owner is None:  # only the chat's owner can wipe its memory
+    if auth.owns_thread(chat_id, owner):  # only the chat's owner can wipe its history and the agent's memory of it
+        store.delete_chat(chat_id, owner)
         forget_thread(chat_id)
+        auth.release_thread(chat_id, owner)
     return {'ok': True}
 
 
 @router.post('/api/chat')
 async def chat(request: Request):
     access.check_origin(request)
-    access.limit_chat(request)
+    user = access.current_user(request)
+    access.limit_chat(user['id'])
     try:
         body = await request.json()
     except ValueError:
@@ -146,6 +231,8 @@ async def chat(request: Request):
         return JSONResponse({'error': 'thread_id must be 8-64 letters, digits, - or _.'}, status_code=400)
     if not message or len(message) > 1000:
         return JSONResponse({'error': 'Write a message of 1 to 1000 characters.'}, status_code=400)
+    if not auth.claim_thread(thread_id, user['id']):  # a conversation belongs to the account that started it
+        return JSONResponse({'error': 'This chat belongs to another account.'}, status_code=403)
 
     def events():
         try:

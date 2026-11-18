@@ -3,6 +3,7 @@
     python -m unittest discover -s tests -v
 """
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import config, maps_pin, observability, server, tools  # noqa: E402
+from app import access, config, maps_pin, observability, server, tools  # noqa: E402
 from app.scout_agent import GmapsArgs, Report, finalize  # noqa: E402
 from app.prompts import load_prompt  # noqa: E402
 
@@ -187,6 +188,34 @@ class Observability(unittest.TestCase):
         self.assertEqual(fake.stored['coordinator'].prompt, load_prompt('coordinator'))
         self.assertEqual(fake.stored['scout-agent'].prompt, load_prompt('scout'))
 
+    def test_traces_are_filed_under_the_configured_environment(self):
+        captured = {}
+
+        class Spy:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def flush(self):
+                pass
+        with mock.patch.multiple(config, LANGFUSE_ENABLED=True, LANGFUSE_PUBLIC_KEY='pk', LANGFUSE_SECRET_KEY='sk',
+                                 LANGFUSE_ENVIRONMENT='production'), \
+                mock.patch('langfuse.Langfuse', Spy), mock.patch('atexit.register'):
+            observability.get_langfuse.__wrapped__()  # the cached function without its cache
+            self.assertEqual(captured['environment'], 'production')
+            self.assertEqual(observability.trace_tags(), ['scout', 'production'])
+            self.assertEqual(observability.trace_tags(True), ['scout', 'production', 'hitl'])
+
+    def test_the_environment_defaults_to_development_and_rejects_names_langfuse_would_refuse(self):
+        import importlib
+        for given, expected in [(None, 'development'), ('Production', 'production'), ('langfuse-x', 'development'), ('a b', 'development')]:
+            env = {} if given is None else {'LANGFUSE_TRACING_ENVIRONMENT': given}
+            with mock.patch.dict('os.environ', env, clear=False):
+                if given is None:
+                    os.environ.pop('LANGFUSE_TRACING_ENVIRONMENT', None)
+                reloaded = importlib.reload(config)
+                self.assertEqual(reloaded.LANGFUSE_ENVIRONMENT, expected, given)
+        importlib.reload(config)
+
     def test_a_langfuse_outage_does_not_break_startup(self):
         class Down(FakeLangfuse):
             def create_prompt(self, **kwargs):
@@ -218,8 +247,18 @@ class AgentMemory(unittest.TestCase):
 
 
 class Server(unittest.TestCase):
+    """The routes with an account signed in (who may see what is in test_auth.py)."""
+
     def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        patch = mock.patch.object(config, 'DATA_DIR', Path(self.folder.name))
+        patch.start()
+        self.addCleanup(self.folder.cleanup)
+        self.addCleanup(patch.stop)
+        access._hits.clear()
         self.client = TestClient(server.app)
+        token = self.client.post('/api/auth/signup', json={'email': 'tester@example.com', 'password': 'correct horse battery'}).json()['token']
+        self.client.headers['Authorization'] = 'Bearer ' + token
 
     def post(self, body, **headers):
         return self.client.post('/api/chat', json=body, headers=headers)
@@ -259,12 +298,12 @@ class Server(unittest.TestCase):
 
     def test_chat_history_round_trip_on_disk(self):
         cid = 'abcdefgh12345678'
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(config, 'DATA_DIR', Path(folder)), \
-                mock.patch.object(server, 'forget_thread') as forget:
+        folder = self.folder.name
+        with mock.patch.object(server, 'forget_thread') as forget:
             self.assertEqual(self.client.get('/api/chats').json(), [])
             body = {'title': 'gyms in Koramangala', 'updated': 5, 'log': [{'u': 'hi'}, {'ev': {'type': 'done'}}]}
             self.assertEqual(self.client.put(f'/api/chats/{cid}', json=body).status_code, 200)
-            self.assertTrue((Path(folder) / 'chats' / f'{cid}.json').is_file())
+            self.assertEqual(len(list((Path(folder) / 'chats').glob(f'*/{cid}.json'))), 1)  # in the account's own folder
             self.assertEqual(self.client.get('/api/chats').json(), [{'id': cid, 'title': 'gyms in Koramangala', 'updated': 5.0}])
             self.assertEqual(self.client.get(f'/api/chats/{cid}').json()['log'], body['log'])
             self.assertEqual(self.client.delete(f'/api/chats/{cid}').status_code, 200)
@@ -272,15 +311,15 @@ class Server(unittest.TestCase):
             self.assertEqual(self.client.get(f'/api/chats/{cid}').status_code, 404)
 
     def test_chat_history_rejects_bad_ids_bodies_and_other_sites(self):
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(config, 'DATA_DIR', Path(folder)):
-            good = {'title': 't', 'updated': 1, 'log': []}
-            self.assertEqual(self.client.put('/api/chats/bad!', json=good).status_code, 400)
-            self.assertGreaterEqual(self.client.put('/api/chats/..%2F..%2Fevil', json=good).status_code, 400)  # never matches the route
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={'title': 't'}).status_code, 400)
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={**good, 'log': 'x'}).status_code, 400)
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json=good, headers={'origin': 'http://evil.example'}).status_code, 403)
-            self.assertEqual(self.client.delete('/api/chats/abcdefgh12345678', headers={'origin': 'http://evil.example'}).status_code, 403)
-            self.assertEqual(list((Path(folder) / 'chats').glob('*')), [])
+        folder = self.folder.name
+        good = {'title': 't', 'updated': 1, 'log': []}
+        self.assertEqual(self.client.put('/api/chats/bad!', json=good).status_code, 400)
+        self.assertGreaterEqual(self.client.put('/api/chats/..%2F..%2Fevil', json=good).status_code, 400)  # never matches the route
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={'title': 't'}).status_code, 400)
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={**good, 'log': 'x'}).status_code, 400)
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json=good, headers={'origin': 'http://evil.example'}).status_code, 403)
+        self.assertEqual(self.client.delete('/api/chats/abcdefgh12345678', headers={'origin': 'http://evil.example'}).status_code, 403)
+        self.assertEqual(list((Path(folder) / 'chats').rglob('*.json')), [])
 
     def test_static_files_and_unknown_paths(self):
         self.assertEqual(self.client.get('/').status_code, 200)

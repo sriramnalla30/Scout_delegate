@@ -273,6 +273,9 @@ class Stored(unittest.TestCase):
 
     def test_server_endpoint(self):
         client = TestClient(server.app)
+        self.assertEqual(client.get('/api/searches/s000000000000').status_code, 401)  # stored results are for signed-in people
+        token = client.post('/api/auth/signup', json={'email': 'searcher@example.com', 'password': 'correct horse battery'}).json()['token']
+        client.headers['Authorization'] = 'Bearer ' + token
         with self.scraper([raw_place('A')]):
             out = searches.perform(**ARGS)
         body = client.get(f"/api/searches/{out['search_id']}").json()
