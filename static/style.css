@@ -104,7 +104,7 @@ textarea::placeholder{color:var(--muted)}
 .card{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px;box-shadow:0 10px 30px -22px rgba(51,65,85,.5)}
 .eyebrow{font:500 10px var(--mono);letter-spacing:1.6px;color:var(--brand-deep);margin-bottom:10px}
 
-/* The column shows what Scout can do. While the coordinator is working (from sending a message until it asks something or replies) the thinking card takes its place and arrives with a short slide-in. */
+/* The column shows what Scout can do on a fresh page. The first message sends it away and the thinking card takes its place with a short slide-in; the card then stays for the whole chat. */
 .thinkcard{display:none}
 .tracecol.thinking .showcase{display:none}
 .tracecol.thinking .thinkcard{display:block;animation:arrive .5s cubic-bezier(.2,.8,.2,1)}

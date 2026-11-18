@@ -25,6 +25,8 @@ cd D:\AI_Projects\Search_Agent_2\Place_Discover_Negotiating-AGENT
 .\.venv\Scripts\python.exe cli.py             # or talk to it in the terminal
 ```
 
+Everyone signs in (email and password, or Google), and each account sees only its own chats. For a laptop, list accounts in `.env` (`SEED_USERS=email:password;email:password`, see `.env.example`); `docs/DEPLOYMENT.md` has the Google setup.
+
 The app reads only the keys it needs from `.env` (`GROQ_API_KEY` and the three `LANGFUSE_*` values) and does not export the rest of the file, so other tracing keys stored there (LangSmith) are not switched on by it. Override the model with `LLM_MODEL` (default `openai/gpt-oss-120b`) and `LLM_REASONING_EFFORT` (default `low`).
 
 ## Langfuse
@@ -44,7 +46,8 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 | `app/coordinator.py` | The coordinator agent, the pause/resume logic and the event stream. |
 | `app/tools.py` | `ask_user`, `geocode`, `search_places`, `scout_agent`. |
 | `app/scout_agent.py` | The scout sub-agent, its `Report` output schema, and `complete()`, the code check on a ready report. |
-| `app/access.py` | Who may call the API: other sites, one chat history per browser, a message limit. |
+| `app/auth.py` | Accounts and sign-in: email and password, Google, session tokens, who owns which chat, the laptop's seed accounts. |
+| `app/access.py` | Who may call the API: other sites, the signed-in account, message and sign-in limits. |
 | `app/gmaps.py` | Runs the scraper binary (the only file that knows about it). |
 | `app/places.py` | The place model: scraper record to place, scores, opening hours, phone kinds, summary, data coverage. Pure functions. |
 | `app/searches.py` | Stored searches (one JSON file each in `data/searches/`), reuse of recent identical searches, and `perform()`. |
@@ -52,7 +55,8 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 | `static/config.js` | Where the API is (empty = the same site). Written at build time when the page is hosted elsewhere. |
 | `Dockerfile`, `render.yaml`, `netlify.toml`, `scripts/write-config.mjs` | Deployment: the API on Render, the page on Netlify. See `docs/DEPLOYMENT.md`. |
 | `app/server.py`, `static/` | FastAPI server (server-sent events) and the chat UI. |
-| `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py`, `tests/test_llm.py` | Offline unit tests (no model, no network, no scraper binary). |
+| `static/auth.js`, `static/auth.css` | The sign-in screen, the session token, and the profile (bottom of the history drawer). |
+| `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py`, `tests/test_auth.py`, `tests/test_llm.py` | Offline unit tests (no model, no network, no scraper binary). |
 | `tests/live_scenarios.py` | Five scenarios against the real model. |
 
 ## The search step

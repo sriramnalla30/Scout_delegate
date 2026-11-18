@@ -5,7 +5,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     branch: first_half
-    plan: free                # free: 512 MB, sleeps after 15 minutes idle, no disk (chats are lost on restart).
+    plan: free                # free: 512 MB, sleeps after 15 minutes idle, no disk (accounts and chats are lost on restart).
                               # For steady use: plan: standard (2 GB, the geocode step peaks near 900 MB) and the disk below.
     healthCheckPath: /api/health
     autoDeploy: true
@@ -19,6 +19,8 @@ services:
       - key: CHAT_RATE_PER_HOUR
         value: 40
       - key: GROQ_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID   # the OAuth client id for "Continue with Google" (docs/DEPLOYMENT.md, Sign-in). Without it the Google button says it is not set up.
         sync: false
       - key: LANGFUSE_PUBLIC_KEY
         sync: false

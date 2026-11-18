@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import config, maps_pin, observability, server, tools  # noqa: E402
+from app import access, config, maps_pin, observability, server, tools  # noqa: E402
 from app.scout_agent import GmapsArgs, Report, finalize  # noqa: E402
 from app.prompts import load_prompt  # noqa: E402
 
@@ -247,8 +247,18 @@ class AgentMemory(unittest.TestCase):
 
 
 class Server(unittest.TestCase):
+    """The routes with an account signed in (who may see what is in test_auth.py)."""
+
     def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        patch = mock.patch.object(config, 'DATA_DIR', Path(self.folder.name))
+        patch.start()
+        self.addCleanup(self.folder.cleanup)
+        self.addCleanup(patch.stop)
+        access._hits.clear()
         self.client = TestClient(server.app)
+        token = self.client.post('/api/auth/signup', json={'email': 'tester@example.com', 'password': 'correct horse battery'}).json()['token']
+        self.client.headers['Authorization'] = 'Bearer ' + token
 
     def post(self, body, **headers):
         return self.client.post('/api/chat', json=body, headers=headers)
@@ -288,12 +298,12 @@ class Server(unittest.TestCase):
 
     def test_chat_history_round_trip_on_disk(self):
         cid = 'abcdefgh12345678'
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(config, 'DATA_DIR', Path(folder)), \
-                mock.patch.object(server, 'forget_thread') as forget:
+        folder = self.folder.name
+        with mock.patch.object(server, 'forget_thread') as forget:
             self.assertEqual(self.client.get('/api/chats').json(), [])
             body = {'title': 'gyms in Koramangala', 'updated': 5, 'log': [{'u': 'hi'}, {'ev': {'type': 'done'}}]}
             self.assertEqual(self.client.put(f'/api/chats/{cid}', json=body).status_code, 200)
-            self.assertTrue((Path(folder) / 'chats' / f'{cid}.json').is_file())
+            self.assertEqual(len(list((Path(folder) / 'chats').glob(f'*/{cid}.json'))), 1)  # in the account's own folder
             self.assertEqual(self.client.get('/api/chats').json(), [{'id': cid, 'title': 'gyms in Koramangala', 'updated': 5.0}])
             self.assertEqual(self.client.get(f'/api/chats/{cid}').json()['log'], body['log'])
             self.assertEqual(self.client.delete(f'/api/chats/{cid}').status_code, 200)
@@ -301,15 +311,15 @@ class Server(unittest.TestCase):
             self.assertEqual(self.client.get(f'/api/chats/{cid}').status_code, 404)
 
     def test_chat_history_rejects_bad_ids_bodies_and_other_sites(self):
-        with tempfile.TemporaryDirectory() as folder, mock.patch.object(config, 'DATA_DIR', Path(folder)):
-            good = {'title': 't', 'updated': 1, 'log': []}
-            self.assertEqual(self.client.put('/api/chats/bad!', json=good).status_code, 400)
-            self.assertGreaterEqual(self.client.put('/api/chats/..%2F..%2Fevil', json=good).status_code, 400)  # never matches the route
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={'title': 't'}).status_code, 400)
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={**good, 'log': 'x'}).status_code, 400)
-            self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json=good, headers={'origin': 'http://evil.example'}).status_code, 403)
-            self.assertEqual(self.client.delete('/api/chats/abcdefgh12345678', headers={'origin': 'http://evil.example'}).status_code, 403)
-            self.assertEqual(list((Path(folder) / 'chats').glob('*')), [])
+        folder = self.folder.name
+        good = {'title': 't', 'updated': 1, 'log': []}
+        self.assertEqual(self.client.put('/api/chats/bad!', json=good).status_code, 400)
+        self.assertGreaterEqual(self.client.put('/api/chats/..%2F..%2Fevil', json=good).status_code, 400)  # never matches the route
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={'title': 't'}).status_code, 400)
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json={**good, 'log': 'x'}).status_code, 400)
+        self.assertEqual(self.client.put('/api/chats/abcdefgh12345678', json=good, headers={'origin': 'http://evil.example'}).status_code, 403)
+        self.assertEqual(self.client.delete('/api/chats/abcdefgh12345678', headers={'origin': 'http://evil.example'}).status_code, 403)
+        self.assertEqual(list((Path(folder) / 'chats').rglob('*.json')), [])
 
     def test_static_files_and_unknown_paths(self):
         self.assertEqual(self.client.get('/').status_code, 200)

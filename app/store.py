@@ -1,10 +1,12 @@
-"""Chat history on disk: one JSON file per chat in <DATA_DIR>/chats/, or in <DATA_DIR>/chats/<owner>/ when each browser keeps its own.
+"""Chat history on disk: one JSON file per chat in <DATA_DIR>/chats/<owner>/, where the owner is the account's id.
 
-The file name is the chat's thread id and the owner is a browser id, so callers must pass values that already matched
-server.THREAD_ID and access.CLIENT_ID.
+The file name is the chat's thread id and the owner is an account id (app/auth.py), so callers must pass values that
+already matched server.THREAD_ID and came from a signed-in request. Before accounts existed the files sat directly in
+<DATA_DIR>/chats/ ("legacy"): import_legacy() copies those into one account's folder.
 """
 import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -56,3 +58,23 @@ def delete_chat(chat_id: str, owner: str | None = None) -> bool:
     existed = path.is_file()
     path.unlink(missing_ok=True)
     return existed
+
+
+def chat_ids(owner: str | None = None) -> list[str]:
+    return [file.stem for file in _dir(owner).glob('*.json')]
+
+
+def import_legacy(owner: str) -> list[str]:
+    """Copy the chats saved before accounts existed into this account's history, once (a marker file remembers it).
+    The old files are left where they are, so nothing is ever cleared. Returns the chat ids copied."""
+    marker = _dir() / '.legacy-imported'
+    if marker.exists():
+        return []
+    copied = []
+    for file in sorted(_dir().glob('*.json')):
+        target = _dir(owner) / file.name
+        if not target.exists():
+            shutil.copy2(file, target)
+            copied.append(file.stem)
+    marker.write_text(owner, encoding='utf-8')
+    return copied
