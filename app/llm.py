@@ -5,11 +5,12 @@ from langchain_groq import ChatGroq
 from app import config
 
 
-def get_llm() -> ChatGroq:
+def get_llm(name: str | None = None) -> ChatGroq:
+    """`name` is what the model call is called in Langfuse, so each agent's calls can be told apart."""
     if not config.GROQ_API_KEY:
         raise RuntimeError('GROQ_API_KEY is not set. Add it to .env (see .env.example).')
     return ChatGroq(model=config.LLM_MODEL, api_key=config.GROQ_API_KEY, temperature=0,
-                    reasoning_effort=config.LLM_REASONING_EFFORT, max_retries=2, timeout=60)
+                    reasoning_effort=config.LLM_REASONING_EFFORT, max_retries=2, timeout=60, name=name)
 
 
 RETRYABLE_CODES = ('output_parse_failed', 'tool_use_failed')

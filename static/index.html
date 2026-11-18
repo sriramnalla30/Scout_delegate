@@ -2,48 +2,51 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Scout · Place finder</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2318aa7e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='1.8' fill='white'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/places.css"><script defer src="/places.js"></script><script defer src="/app.js"></script></head>
 <body>
 <nav class="pill" aria-label="Scout">
   <a class="brand" href="/"><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#18aa7e"/><circle cx="16" cy="16" r="6" fill="none" stroke="#fff" stroke-width="2.5"/><circle cx="16" cy="16" r="1.8" fill="#fff"/></svg><b>Scout</b></a>
   <span class="sep"></span>
   <span class="navitem active">Place finder</span>
-  <button id="toggle-history" class="navbtn histbtn" type="button">History</button>
   <button id="new-chat" class="navbtn" type="button">New chat</button>
 </nav>
 
-<main>
-  <aside class="histcol" id="histcol" aria-label="Chat history">
-    <div class="card">
-      <div class="eyebrow">HISTORY</div>
-      <ul class="hist" id="hist"></ul>
-    </div>
-  </aside>
+<button id="open-history" class="histopen" type="button" aria-label="Open chat history" aria-controls="drawer" aria-expanded="false" title="Chat history">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+</button>
+<div id="scrim" class="scrim"></div>
+<aside id="drawer" class="drawer" aria-label="Chat history" inert>
+  <div class="dhead">
+    <b>History</b>
+    <button id="close-history" class="dclose" type="button" aria-label="Close chat history">×</button>
+  </div>
+  <button id="drawer-new" class="btn dnew" type="button">+ New chat</button>
+  <input id="hist-search" class="dsearch" type="search" placeholder="Search chats" aria-label="Search chats" autocomplete="off">
+  <div id="hist" class="hist"></div>
+</aside>
 
+<main>
   <section class="chatcol">
     <div id="hero" class="hero">
       <h1>Where should we scout?</h1>
-      <p>Name a place, an area and a city. Scout takes it from there.</p>
+      <p>Name a place, an area and a city. The coordinator takes it from there.</p>
       <div class="chips" id="chips"></div>
     </div>
     <div id="thread" class="thread" aria-live="polite"></div>
     <form id="composer" class="composer" autocomplete="off">
       <div id="composer-hint" class="hint" hidden></div>
-      <div class="row"><textarea id="input" rows="1" maxlength="1000" placeholder="Ask Scout to find a place…" aria-label="Message"></textarea>
+      <div class="row"><textarea id="input" rows="1" maxlength="1000" placeholder="Ask the coordinator to find a place…" aria-label="Message"></textarea>
       <button id="send" class="btn" type="submit">Send</button></div>
     </form>
   </section>
 
   <aside class="tracecol" aria-label="Agent trace">
     <div class="card">
-      <div class="eyebrow">SCOUT IS THINKING</div>
-      <ol class="think" id="think"><li class="idle"><i></i><div><span>Send a message and Scout's decisions show up here, step by step.</span></div></li></ol>
-    </div>
-    <div class="card">
-      <div class="eyebrow">RAW TRACE</div>
-      <div id="trace" class="trace"><p class="muted">Steps appear here as the agents work.</p></div>
+      <div class="eyebrow">COORDINATOR IS THINKING</div>
+      <ol class="think" id="think"><li class="idle"><i></i><div><span>Send a message and the coordinator's decisions show up here, step by step.</span></div></li></ol>
     </div>
   </aside>
 </main>
-<footer>Scout demo · orchestrator + parser sub-agent · the search tool is not connected</footer>
+<button id="copy-session" class="sessbtn" type="button" hidden>Copy session ID</button>
+<footer>Scout demo · coordinator + scout agent · Google Maps search</footer>
 </body></html>

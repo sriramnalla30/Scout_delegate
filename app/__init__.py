@@ -1,1 +1,1 @@
-"""Scout: an orchestrator agent that coordinates a place search with tools and a sub-agent."""
+"""Scout place finder: a coordinator agent that runs a place search with tools and a scout sub-agent."""

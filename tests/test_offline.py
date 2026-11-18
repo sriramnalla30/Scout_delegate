@@ -2,7 +2,6 @@
 
     python -m unittest discover -s tests -v
 """
-import io
 import json
 import sys
 import tempfile
@@ -14,60 +13,86 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import config, server, tools  # noqa: E402
-from app.parser_agent import GmapsArgs, ParserResult, finalize  # noqa: E402
+from app import config, maps_pin, observability, server, tools  # noqa: E402
+from app.scout_agent import GmapsArgs, Report, finalize  # noqa: E402
 from app.prompts import load_prompt  # noqa: E402
 
 
-class FakeResponse(io.BytesIO):
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
+def pin(lat, lng, name='somewhere', exact=True):
+    return {'lat': lat, 'lng': lng, 'name': name, 'exact': exact}
 
 
-def nominatim(rows):
-    return mock.patch.object(tools.urllib.request, 'urlopen', lambda *a, **k: FakeResponse(json.dumps(rows).encode()))
+BANGALORE = pin(12.9716, 77.5946, 'Bengaluru')
+
+
+def maps(area, city=BANGALORE):
+    """Fake the Google Maps lookup: it returns (area pin, city pin) without opening a browser."""
+    return mock.patch.object(tools.maps_pin, 'lookup', lambda area_query, city_query: (area, city))
 
 
 class Geocode(unittest.TestCase):
-    def setUp(self):
-        tools._GEOCODE_CACHE.clear()
-        tools._LAST_GEOCODE = 0.0
+    def geocode(self, area='Koramangala', city='Bangalore'):
+        return tools.geocode.invoke({'area': area, 'city': city})
 
-    def test_found(self):
-        with nominatim([{'lat': '12.9352', 'lon': '77.6245', 'display_name': 'Koramangala, Bengaluru'}]):
-            result = tools.geocode.invoke({'place': 'Koramangala, Bangalore, India'})
-        self.assertEqual((result['lat'], result['lng']), (12.9352, 77.6245))
+    def test_found_and_checked_against_the_city(self):
+        with maps(pin(12.9352, 77.6245, 'Koramangala')):
+            result = self.geocode()
+        self.assertEqual((result['lat'], result['lng'], result['display_name']), (12.9352, 77.6245, 'Koramangala'))
+        self.assertLess(result['km_from_city_centre'], 10)
+        self.assertEqual(set(result), {'lat', 'lng', 'display_name', 'km_from_city_centre'})
 
-    def test_not_found_is_reported_not_raised(self):
-        with nominatim([]):
-            result = tools.geocode.invoke({'place': 'Nowhereville'})
-        self.assertIn('error', result)
+    def test_a_name_maps_does_not_recognise_is_reported_not_raised(self):
+        with maps(pin(12.97, 77.59, 'Nowhereville, Bangalore', exact=False)):  # Maps only showed a results list
+            self.assertIn('error', self.geocode('Nowhereville'))
 
-    def test_network_failure_is_reported_not_raised(self):
-        def boom(*a, **k):
-            raise OSError('offline')
-        with mock.patch.object(tools.urllib.request, 'urlopen', boom):
-            self.assertIn('error', tools.geocode.invoke({'place': 'Anywhere'}))
+    def test_a_failed_lookup_is_reported_with_its_reason(self):
+        with maps({'error': 'TimeoutError: page took too long'}):
+            error = self.geocode()['error']
+        self.assertIn('Koramangala', error)
+        self.assertIn('TimeoutError', error)
 
-    def test_cached(self):
-        with nominatim([{'lat': '1', 'lon': '2', 'display_name': 'x'}]):
-            first = tools.geocode.invoke({'place': 'Same Place'})
-        with mock.patch.object(tools.urllib.request, 'urlopen', side_effect=AssertionError('should not be called')):
-            self.assertEqual(tools.geocode.invoke({'place': ' same place '}), first)
+    def test_a_failed_city_lookup_is_reported(self):
+        with maps(pin(12.9352, 77.6245), {'error': 'TimeoutError'}):
+            self.assertIn('Bangalore', self.geocode()['error'])
+
+    def test_same_name_in_another_city_is_refused(self):
+        with maps(pin(17.44, 78.35, 'Gachibowli')):  # Gachibowli is in Hyderabad, 500 km away
+            error = self.geocode('Gachibowli', 'Bangalore')['error']
+        self.assertIn('km from Bangalore', error)
+
+    def test_asking_for_the_city_itself_is_fine(self):
+        with maps(pin(12.9716, 77.5946, 'Bengaluru', exact=False)):
+            self.assertEqual(self.geocode('Bangalore', 'Bangalore')['km_from_city_centre'], 0.0)
+
+    def test_every_lookup_goes_to_maps_again(self):
+        calls = []
+        with mock.patch.object(tools.maps_pin, 'lookup', lambda a, c: calls.append(a) or (pin(12.93, 77.62), BANGALORE)):
+            self.geocode()
+            self.geocode()
+        self.assertEqual(len(calls), 2)
+
+
+class MapsPin(unittest.TestCase):
+    def test_pin_is_read_from_the_page_address(self):
+        url = 'https://www.google.com/maps/place/Koramangala/@12.9279,77.6271,14z/data=!4m6!3d12.9352403!4d77.624532'
+        self.assertEqual(maps_pin.pin_from_url(url), (12.93524, 77.62453))  # the exact place wins over the map centre
+
+    def test_map_centre_is_used_when_there_is_no_exact_pin(self):
+        self.assertEqual(maps_pin.pin_from_url('https://www.google.com/maps/search/x/@16.5,80.6,12z'), (16.5, 80.6))
+
+    def test_no_pin_in_the_address(self):
+        self.assertIsNone(maps_pin.pin_from_url('https://www.google.com/maps/search/x'))
 
 
 class Prompts(unittest.TestCase):
-    def test_orchestrator_prompt_is_generic_and_routes_by_parser_status(self):
-        text = load_prompt('orchestrator')
-        for needle in ('ask_user', 'parser_agent', 'needs_input', 'ready'):
+    def test_coordinator_prompt_is_generic_and_routes_by_scout_status(self):
+        text = load_prompt('coordinator')
+        for needle in ('ask_user', 'scout_agent', 'needs_input', 'ready'):
             self.assertIn(needle, text)
-        self.assertNotIn('geocode', text)  # what the search tool needs is the parser's knowledge, not Scout's
+        self.assertNotIn('geocode', text)  # what the search tool needs is the scout agent's knowledge, not the coordinator's
 
-    def test_parser_prompt_forbids_invented_coordinates_and_guessing(self):
-        text = load_prompt('parser')
+    def test_scout_prompt_forbids_invented_coordinates_and_guessing(self):
+        text = load_prompt('scout')
         self.assertIn('geocode', text)
         self.assertIn('NEVER write coordinates from memory', text)
         self.assertIn('NEVER guess', text)
@@ -75,7 +100,7 @@ class Prompts(unittest.TestCase):
 
 def result(**fields):
     base = dict(status='ready', business_type='gyms', area='Koramangala', city='Bangalore')
-    return ParserResult(**{**base, **fields})
+    return Report(**{**base, **fields})
 
 
 GOOD_ARGS = GmapsArgs(query='gyms in Koramangala Bangalore', lat=12.93, lng=77.62)
@@ -95,10 +120,79 @@ class Finalize(unittest.TestCase):
         out = finalize(result(status='needs_input', question='Another spelling?', missing=['area']))
         self.assertEqual((out['status'], out['question']), ('needs_input', 'Another spelling?'))
 
+    def test_models_own_missing_list_is_kept_when_stated_details_were_left_out_of_the_report(self):
+        out = finalize(result(status='needs_input', business_type=None, area=None, city=None, missing=['area'], question='Which area?'))
+        self.assertEqual((out['status'], out['missing'], out['question']), ('needs_input', ['area'], 'Which area?'))
+
+    def test_missing_list_naming_a_filled_detail_falls_back_to_the_empty_fields(self):
+        out = finalize(result(status='needs_input', city=None, missing=['area']))
+        self.assertEqual(out['missing'], ['city'])
+
     def test_ready_without_coordinates_becomes_failed(self):
         out = finalize(result(args=GmapsArgs(query='gyms in Koramangala Bangalore')))
         self.assertEqual(out['status'], 'failed')
         self.assertTrue(out['problem'])
+
+
+class FakePrompt:
+    def __init__(self, prompt, version):
+        self.prompt, self.version = prompt, version
+
+
+class FakeLangfuse:
+    """Stands in for the Langfuse client: keeps prompts in a dict and counts versions."""
+    def __init__(self, stored=None):
+        self.stored, self.created = dict(stored or {}), []
+
+    def get_prompt(self, name, **kwargs):
+        if name not in self.stored:
+            raise LookupError('not found')
+        return self.stored[name]
+
+    def create_prompt(self, *, name, prompt, **kwargs):
+        version = (self.stored[name].version + 1) if name in self.stored else 1
+        self.stored[name] = FakePrompt(prompt, version)
+        self.created.append((name, kwargs.get('labels')))
+        return self.stored[name]
+
+
+class Observability(unittest.TestCase):
+    def setUp(self):
+        observability._versions.clear()
+
+    def test_off_without_keys_so_nothing_is_added_to_a_run(self):
+        with mock.patch.object(observability, 'get_langfuse', lambda: None):
+            turn = observability.start_turn('abcdefgh12345678', 'Turn 1', 'hi')
+            self.assertEqual(turn.config, {})
+            turn.finish('reply')  # a no-op when tracing is off
+            self.assertEqual(observability.sync_prompts(), {})
+
+    def test_prompts_are_created_once_and_versioned_only_when_the_text_changes(self):
+        fake = FakeLangfuse()
+        with mock.patch.object(observability, 'get_langfuse', lambda: fake):
+            first = observability.sync_prompts()
+            self.assertEqual(first, {'coordinator': 1, 'scout': 1})
+            self.assertEqual(sorted(name for name, _ in fake.created), ['coordinator', 'scout-agent'])
+            self.assertTrue(all(labels == ['production'] for _, labels in fake.created))
+            self.assertEqual(observability.sync_prompts(), first)  # same text: no new version
+            self.assertEqual(len(fake.created), 2)
+            fake.stored['scout-agent'].prompt = 'an older text'  # Langfuse holds a different text than the file
+            self.assertEqual(observability.sync_prompts()['scout'], 2)
+            self.assertEqual(len(fake.created), 3)
+
+    def test_the_saved_text_is_exactly_the_prompt_file(self):
+        fake = FakeLangfuse()
+        with mock.patch.object(observability, 'get_langfuse', lambda: fake):
+            observability.sync_prompts()
+        self.assertEqual(fake.stored['coordinator'].prompt, load_prompt('coordinator'))
+        self.assertEqual(fake.stored['scout-agent'].prompt, load_prompt('scout'))
+
+    def test_a_langfuse_outage_does_not_break_startup(self):
+        class Down(FakeLangfuse):
+            def create_prompt(self, **kwargs):
+                raise OSError('offline')
+        with mock.patch.object(observability, 'get_langfuse', lambda: Down()):
+            self.assertEqual(observability.sync_prompts(), {})
 
 
 class AgentMemory(unittest.TestCase):

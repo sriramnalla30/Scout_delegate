@@ -1,8 +1,8 @@
-"""Talk to the orchestrator in the terminal:  python cli.py"""
+"""Talk to the coordinator in the terminal:  python cli.py"""
 import sys
 import uuid
 
-from app.orchestrator import stream_events
+from app.coordinator import stream_events
 
 DIM, RESET = '\033[2m', '\033[0m'
 
@@ -10,13 +10,13 @@ DIM, RESET = '\033[2m', '\033[0m'
 def show(event):
     kind = event['type']
     if kind == 'tool_call':
-        print(f"{DIM}  orchestrator -> {event['name']}({event['args']}){RESET}")
+        print(f"{DIM}  coordinator -> {event['name']}({event['args']}){RESET}")
     elif kind == 'tool_result':
-        print(f"{DIM}  orchestrator <- {event['name']}: {event['data']}{RESET}")
+        print(f"{DIM}  coordinator <- {event['name']}: {event['data']}{RESET}")
     elif kind == 'sub':
         detail = event.get('name') or event.get('kind')
         extra = event.get('args') or event.get('content') or event.get('data') or ''
-        print(f"{DIM}      parser: {event['kind']} {detail} {extra}{RESET}")
+        print(f"{DIM}      scout agent: {event['kind']} {detail} {extra}{RESET}")
     elif kind == 'message':
         print(f"\nScout: {event['text']}\n")
     elif kind == 'interrupt':

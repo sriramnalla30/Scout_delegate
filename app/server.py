@@ -1,19 +1,36 @@
-"""Local web server: serves the chat UI and streams the orchestrator's steps as server-sent events."""
+"""Local web server: serves the chat UI and streams the coordinator's steps as server-sent events."""
+import asyncio
 import json
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from app import config, store
-from app.orchestrator import forget_thread, stream_events, thread_state
+from app import config, observability, places, searches, store
+from app.coordinator import forget_thread, stream_events, thread_state
 
 STATIC = Path(__file__).resolve().parent.parent / 'static'
-FILES = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css')}
+FILES = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'text/javascript'), '/style.css': ('style.css', 'text/css'),
+         '/places.js': ('places.js', 'text/javascript'), '/places.css': ('places.css', 'text/css')}
 THREAD_ID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
 
-app = FastAPI(title='Scout place finder', docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def lifespan(_app):
+    await asyncio.to_thread(observability.sync_prompts)  # save the system prompts in Langfuse (new version only if changed)
+    yield
+    await asyncio.to_thread(observability.flush)  # do not lose the last traces on shutdown
+
+
+app = FastAPI(title='Scout place finder', docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+@app.middleware('http')
+async def no_store(request: Request, call_next):
+    response = await call_next(request)
+    response.headers['Cache-Control'] = 'no-store'  # the browser never keeps an API answer
+    return response
 
 
 def friendly(error: Exception) -> str:
@@ -37,7 +54,8 @@ def sse(event: dict) -> str:
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'model': config.LLM_MODEL, 'key_configured': bool(config.GROQ_API_KEY)}
+    return {'ok': True, 'model': config.LLM_MODEL, 'key_configured': bool(config.GROQ_API_KEY),
+            'langfuse': {'tracing': config.LANGFUSE_ENABLED, 'prompt_versions': observability.prompt_versions()}}
 
 
 def cross_origin(request: Request) -> JSONResponse | None:
@@ -53,6 +71,13 @@ def thread(thread_id: str):
     if not THREAD_ID.match(thread_id):
         return JSONResponse({'error': 'Bad thread id.'}, status_code=400)
     return thread_state(thread_id)
+
+
+@app.get('/api/searches/{search_id}')
+def search_get(search_id: str):
+    """One stored search as a screen should see it now: places in the app's model, summary, data coverage, live open/closed."""
+    doc = searches.load(search_id)
+    return places.view(doc) if doc else JSONResponse({'error': 'Search not found.'}, status_code=404)
 
 
 @app.get('/api/chats')
