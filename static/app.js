@@ -106,8 +106,10 @@ async function copySession() {
 }
 
 function scrollDown() { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); }
-// Once a chat has begun, the hero goes away and the right-hand "what Scout can do" panel gives way to the thinking card.
-function started() { $('.chatcol').classList.add('started'); $('.tracecol').classList.add('started'); }
+function started() { $('.chatcol').classList.add('started'); }
+// The right-hand column shows "what Scout can do". The thinking card takes its place only while the coordinator is working:
+// it arrives when a message is sent, and leaves when the coordinator asks the person something or has replied.
+function setThinking(on) { $('.tracecol').classList.toggle('thinking', on); }
 
 function addUser(text) { started(); const m = el('div', undefined, 'msg user'); m.append(el('div', text, 'bubble')); $('#thread').append(m); scrollDown(); }
 function addBot(text, kind) {
@@ -196,13 +198,13 @@ function handle(ev) {
       } else if (ev.kind === 'tool_result' && /error/.test(ev.content || '')) think('Map lookup failed, trying again or asking', undefined, 'bad');
       break;
     case 'interrupt':
-      hideTyping(); waiting = true; think('Paused. Waiting for your answer', undefined, 'ask'); return addBot(ev.question, 'ask');
+      hideTyping(); waiting = true; think('Paused. Waiting for your answer', undefined, 'ask'); setThinking(false); return addBot(ev.question, 'ask');
     case 'message':
-      hideTyping(); think('Done. Replying to you'); thinkDone(); return addBot(ev.text);
+      hideTyping(); think('Done. Replying to you'); thinkDone(); setThinking(false); return addBot(ev.text);
     case 'error':
-      hideTyping(); started(); { const m = el('div', undefined, 'msg err'); m.append(el('div', ev.message, 'bubble')); $('#thread').append(m); } think('Something went wrong', ev.message, 'bad'); thinkDone(); break;
+      hideTyping(); started(); { const m = el('div', undefined, 'msg err'); m.append(el('div', ev.message, 'bubble')); $('#thread').append(m); } think('Something went wrong', ev.message, 'bad'); thinkDone(); setThinking(false); break;
     case 'done':
-      hideTyping(); waiting = !!ev.waiting; if (waiting) thinkDone(); break;
+      hideTyping(); waiting = !!ev.waiting; thinkDone(); setThinking(false); break;
   }
 }
 
@@ -231,7 +233,7 @@ async function drain() {
 async function send(text) {
   if (busy || locked || !text.trim()) return;
   record({ u: text }, text); renderHistory();
-  addUser(text); $('#input').value = ''; autosize(); setBusy(true); showTyping();
+  addUser(text); $('#input').value = ''; autosize(); setBusy(true); showTyping(); setThinking(true);
   if (waiting) think('You answered, so I\'m handing it back to the scout agent', short(text, 100));
   else { thinkReset(); think('Reading your message', short(text, 120)); }
   try {
@@ -245,14 +247,14 @@ async function send(text) {
     }
   } catch (e) { onEvent({ type: 'error', message: e.message || 'Could not reach the server.' }); onEvent({ type: 'done', waiting: false }); }
   while (draining) await draining;  // let the last steps finish appearing before the box unlocks
-  save(); renderHistory(); setBusy(false);
+  setThinking(false); save(); renderHistory(); setBusy(false);
 }
 
 function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
 function clearScreen() {
   waiting = false; busy = false; locked = false; queue.length = 0; hideTyping();
   $('#thread').replaceChildren();
-  $('.chatcol').classList.remove('started'); $('.tracecol').classList.remove('started'); thinkReset();
+  $('.chatcol').classList.remove('started'); setThinking(false); thinkReset();
 }
 function reset() {
   clearScreen(); threadId = newId(); current = null; syncSession(); setBusy(false); renderHistory(); window.scrollTo({ top: 0 });
