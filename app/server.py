@@ -5,6 +5,7 @@ ALLOWED_ORIGINS must name. Who may call what is decided in app/access.py.
 """
 import asyncio
 import json
+import logging
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,7 @@ STATIC = Path(__file__).resolve().parent.parent / 'static'
 FILES = {'/': ('index.html', 'text/html'), '/config.js': ('config.js', 'text/javascript'), '/app.js': ('app.js', 'text/javascript'),
          '/style.css': ('style.css', 'text/css'), '/places.js': ('places.js', 'text/javascript'), '/places.css': ('places.css', 'text/css')}
 THREAD_ID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
+logger = logging.getLogger('scout.server')
 
 
 @asynccontextmanager
@@ -150,6 +152,7 @@ async def chat(request: Request):
             for event in stream_events(thread_id, message):
                 yield sse(event)
         except Exception as error:  # surface a readable message instead of dropping the stream
+            logger.warning('chat turn failed for thread %s: %s: %s', thread_id, type(error).__name__, str(error)[:1500])  # the person sees a short message; the host's log keeps the cause
             yield sse({'type': 'error', 'message': friendly(error)})
             yield sse({'type': 'done', 'waiting': False})
 
