@@ -4,3 +4,6 @@ data/
 __pycache__/
 *.log
 bin/
+
+# Google OAuth client downloads hold a secret
+client_secret*.json
