@@ -24,7 +24,7 @@ def get_langfuse():
     from langfuse import Langfuse
 
     client = Langfuse(public_key=config.LANGFUSE_PUBLIC_KEY, secret_key=config.LANGFUSE_SECRET_KEY,
-                      base_url=config.LANGFUSE_BASE_URL, environment='development')
+                      base_url=config.LANGFUSE_BASE_URL, environment=config.LANGFUSE_ENVIRONMENT)
     atexit.register(client.flush)  # short-lived runs (the CLI) must not lose their last traces
     return client
 
@@ -141,6 +141,11 @@ def _handler_class():
     return Handler
 
 
+def trace_tags(tag_hitl: bool = False) -> list[str]:
+    """Tags on every trace. The environment is also a tag, so a trace reads 'production' in the list as well as in the filter."""
+    return ['scout', config.LANGFUSE_ENVIRONMENT] + (['hitl'] if tag_hitl else [])
+
+
 class Turn:
     """One turn of a chat as one Langfuse trace: its input is what the person sent, its output is what they
     were shown (the reply, or the question the run paused on). The agent run is nested inside it.
@@ -158,7 +163,7 @@ class Turn:
         handler = _handler_class()(public_key=config.LANGFUSE_PUBLIC_KEY,
                                   trace_context={'trace_id': self._span.trace_id, 'parent_span_id': self._span.id})
         self.config = {'callbacks': [handler], 'run_name': 'Coordinator',
-                       'metadata': {'langfuse_session_id': thread_id, 'langfuse_tags': ['scout'] + (['hitl'] if tag_hitl else [])}}
+                       'metadata': {'langfuse_session_id': thread_id, 'langfuse_tags': trace_tags(tag_hitl)}}
 
     def hitl_asked(self, question: str) -> None:
         """Marks the point where the run paused to ask the person (human in the loop)."""

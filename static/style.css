@@ -104,10 +104,10 @@ textarea::placeholder{color:var(--muted)}
 .card{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px;box-shadow:0 10px 30px -22px rgba(51,65,85,.5)}
 .eyebrow{font:500 10px var(--mono);letter-spacing:1.6px;color:var(--brand-deep);margin-bottom:10px}
 
-/* Before the first message the column shows what Scout can do. Sending a message swaps it for the thinking card, which arrives with a short slide-in. */
+/* The column shows what Scout can do. While the coordinator is working (from sending a message until it asks something or replies) the thinking card takes its place and arrives with a short slide-in. */
 .thinkcard{display:none}
-.tracecol.started .showcase{display:none}
-.tracecol.started .thinkcard{display:block;animation:arrive .5s cubic-bezier(.2,.8,.2,1)}
+.tracecol.thinking .showcase{display:none}
+.tracecol.thinking .thinkcard{display:block;animation:arrive .5s cubic-bezier(.2,.8,.2,1)}
 @keyframes arrive{from{opacity:0;transform:translateY(14px) scale(.97)}}
 .showcase{overflow:auto;max-height:calc(100vh - 104px);animation:rise .4s ease-out}
 .showcase .eyebrow:not(:first-child){margin-top:18px}
@@ -145,7 +145,7 @@ textarea::placeholder{color:var(--muted)}
 .sessbtn:hover{color:var(--brand-deep);border-color:var(--mint-line);background:var(--mint)}
 .sessbtn.copied{color:var(--brand-deep);background:var(--mint);border-color:var(--mint-bright)}
 
-@media(max-width:900px){main{grid-template-columns:1fr}.tracecol{position:static;max-height:none;order:2}.chatcol{min-height:0}.sessbtn{bottom:92px}.showcase{display:none}}
+@media(max-width:900px){main{grid-template-columns:1fr}.tracecol{position:static;max-height:none;order:2}.chatcol{min-height:0}.sessbtn{bottom:92px}.tracecol:not(.thinking){display:none}}
 @media(max-width:680px){.newbtn{width:42px;padding:0;justify-content:center}.newbtn span{display:none}}
 @media(max-width:560px){.navitem{display:none}.sep{display:none}.bubble{max-width:92%}.kv{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

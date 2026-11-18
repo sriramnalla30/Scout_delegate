@@ -22,7 +22,8 @@ COPY prompts prompts
 COPY static static
 
 # Hosted settings. Chats and the agent's memory live in /data: mount a disk there, or they are lost when the container restarts.
-ENV HOST=0.0.0.0 SCOUT_DATA_DIR=/data GMAPS_BIN=/app/bin/gmaps SCOUT_MAPS_PARALLEL=1 CHAT_SCOPE=per_browser
+# LANGFUSE_TRACING_ENVIRONMENT files every trace under "production" in Langfuse; a local run stays "development".
+ENV HOST=0.0.0.0 SCOUT_DATA_DIR=/data GMAPS_BIN=/app/bin/gmaps SCOUT_MAPS_PARALLEL=1 CHAT_SCOPE=per_browser LANGFUSE_TRACING_ENVIRONMENT=production
 RUN mkdir -p /data
 EXPOSE 10000
 CMD ["python", "-m", "app.server"]

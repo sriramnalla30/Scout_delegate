@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -22,6 +23,11 @@ LANGFUSE_SECRET_KEY = _get('LANGFUSE_SECRET_KEY')
 LANGFUSE_BASE_URL = _get('LANGFUSE_BASE_URL') or _get('LANGFUSE_HOST') or 'https://cloud.langfuse.com'
 # Tracing is on when both keys exist; set LANGFUSE_TRACING=false to switch it off without removing them.
 LANGFUSE_ENABLED = bool(LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY) and _get('LANGFUSE_TRACING', 'true').lower() != 'false'
+# The Langfuse environment every trace is filed under (the Environment filter in Langfuse). 'development' on a
+# laptop; the Dockerfile sets 'production' for the deployed API. Langfuse allows lowercase letters, digits, - and _.
+LANGFUSE_ENVIRONMENT = _get('LANGFUSE_TRACING_ENVIRONMENT', 'development').strip().lower()
+if not re.fullmatch(r'(?!langfuse)[a-z0-9_-]{1,40}', LANGFUSE_ENVIRONMENT):
+    LANGFUSE_ENVIRONMENT = 'development'
 LLM_MODEL = _get('LLM_MODEL', 'openai/gpt-oss-120b')
 LLM_REASONING_EFFORT = _get('LLM_REASONING_EFFORT', 'low')
 
