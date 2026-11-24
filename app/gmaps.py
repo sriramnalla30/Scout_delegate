@@ -30,8 +30,9 @@ class SearchError(Exception):
         self.kind = kind
 
 
-def clean_args(query, lat, lng, radius_m=None, lang='en') -> dict:
-    """The arguments as the scraper takes them, checked. Raises SearchError('invalid') for anything unusable."""
+def clean_args(query, lat, lng, radius_m=None, lang='en', pin=None) -> dict:
+    """The arguments as the scraper takes them, checked. Raises SearchError('invalid') for anything unusable.
+    pin='device' marks a search around the person's own position (it is kept in the stored search, so the page does not print coordinates)."""
     query = str(query or '').strip()
     if not query or len(query) > 200 or '\n' in query or '\r' in query:
         raise SearchError('invalid', 'The search text must be one line of 1 to 200 characters.')
@@ -47,7 +48,10 @@ def clean_args(query, lat, lng, radius_m=None, lang='en') -> dict:
         except (TypeError, ValueError):
             radius_m = None
     lang = str(lang or 'en').strip()
-    return {'query': query, 'lat': round(lat, 6), 'lng': round(lng, 6), 'radius_m': radius_m, 'lang': lang if LANG.fullmatch(lang) else 'en'}
+    args = {'query': query, 'lat': round(lat, 6), 'lng': round(lng, 6), 'radius_m': radius_m, 'lang': lang if LANG.fullmatch(lang) else 'en'}
+    if pin == 'device':
+        args['pin'] = 'device'
+    return args
 
 
 def build_command(binary, query_file, out_file, args: dict) -> list[str]:

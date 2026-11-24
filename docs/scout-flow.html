@@ -12,7 +12,7 @@
 *{box-sizing:border-box}
 body{margin:0;color:var(--text);font:14px/1.5 var(--sans);background-color:var(--bg);
   background-image:radial-gradient(rgba(29,205,152,.25) 1.2px,transparent 1.4px);background-size:24px 24px}
-header{max-width:1760px;margin:0 auto;padding:26px 24px 8px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
+header{max-width:2620px;margin:0 auto;padding:26px 24px 8px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .eyebrow{font:500 11px var(--mono);letter-spacing:1.4px;color:var(--brand-deep)}
 h1{margin:4px 0 0;font:600 34px/1.1 var(--serif);color:var(--ink);letter-spacing:-.5px}
 .legend{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font:500 12px var(--sans);color:var(--ink)}
@@ -25,7 +25,7 @@ h1{margin:4px 0 0;font:600 34px/1.1 var(--serif);color:var(--ink);letter-spacing
 .lg-dia{width:15px;height:15px;transform:rotate(45deg);border-color:var(--brand-deep);background:#f0fdf9;margin:0 3px}
 .lg-tool{border-radius:5px;background:#1e293b;border-color:#1e293b}
 .sep{width:1px;height:20px;background:var(--line)}
-.paths{max-width:1760px;margin:0 auto;padding:14px 24px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.paths{max-width:2620px;margin:0 auto;padding:14px 24px 6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .paths .lead{font:500 11px var(--mono);letter-spacing:1.2px;color:var(--muted);margin-right:4px}
 .pbtn{display:inline-flex;align-items:center;gap:9px;font:500 13px var(--sans);color:var(--ink);background:#fff;border:1px solid var(--faint);border-radius:999px;padding:6px 14px 6px 10px;cursor:pointer}
 .pbtn:hover{background:#f1f5f9}
@@ -34,8 +34,8 @@ h1{margin:4px 0 0;font:600 34px/1.1 var(--serif);color:var(--ink);letter-spacing
 .dot{width:9px;height:9px;border-radius:50%;flex:none}
 .dot.ok{background:var(--brand)}.dot.ask{background:var(--amber)}.dot.bad{background:var(--rose)}.dot.neutral{background:#94a3b8}
 .pbtn.reset{border-style:dashed;color:var(--muted)}
-.stage{max-width:1760px;margin:8px auto 0;padding:0 24px 40px;overflow-x:auto}
-svg{display:block;width:100%;min-width:1400px;height:auto}
+.stage{max-width:2620px;margin:8px auto 0;padding:0 24px 40px;overflow-x:auto}
+svg{display:block;width:100%;min-width:1900px;height:auto}
 svg text{font-family:var(--sans)}
 .edge,.node,.elabel{transition:opacity .2s}
 svg.focus .edge:not(.on),svg.focus .node:not(.on),svg.focus .elabel:not(.on){opacity:.13}
@@ -44,11 +44,11 @@ svg.focus .edge.on path{stroke-width:3.6}
 </style></head>
 <body>
 <header>
-  <div><div class="eyebrow">COORDINATOR.MD → SCOUT.MD</div><h1>Scout decision flow</h1></div>
+  <div><div class="eyebrow">COORDINATOR.MD → SCOUT.MD · “NEAR ME” IS DECIDED BY THE AI, THE POSITION STAYS IN THE APP</div><h1>Scout decision flow</h1></div>
   <div class="legend" id="legend" aria-label="Legend"></div>
 </header>
 <div class="paths" id="paths" role="group" aria-label="Follow a path through the flow"></div>
-<div class="stage"><svg id="flow" viewBox="0 0 1760 2070" role="img" aria-labelledby="ttl"><title id="ttl">Decision flow of the coordinator and the scout agent, with the condition on every edge</title></svg></div>
+<div class="stage"><svg id="flow" viewBox="0 0 2620 2830" role="img" aria-labelledby="ttl"><title id="ttl">Decision flow of the coordinator and the scout agent, including near me (the AI decides, the browser is asked, the app holds the position) and the condition on every edge</title></svg></div>
 
 <script>
 (async () => {
@@ -73,7 +73,7 @@ const CHIP = { neutral: ['#f1f5f9', '#334155'], tool: ['#334155', '#ffffff'], ok
 // ---------- the flow, taken from prompts/coordinator.md and prompts/scout.md ----------
 const LANES = [
   { x: 20, w: 810, title: 'COORDINATOR', file: 'coordinator.md' },
-  { x: 880, w: 860, title: 'SCOUT AGENT', file: 'scout.md' }
+  { x: 880, w: 1700, title: 'SCOUT AGENT', file: 'scout.md' }   // one box: the named-place path on the left, the near-me path on the right
 ];
 const NODES = [
   // ---- Coordinator (coordinator.md)
@@ -82,32 +82,57 @@ const NODES = [
   { id: 's_chat', cx: 170, cy: 362, w: 250, h: 96, title: 'Reply in 1 sentence', chips: [['says what it can do'], ['no tool called', 'bad']] },
   { id: 's_end1', kind: 'pill', tone: 'dark', cx: 170, cy: 484, w: 120, h: 38, title: 'Done' },
   { id: 's_call', cx: 480, cy: 385, w: 340, h: 104, title: 'Say 1 sentence, then call', chips: [['scout_agent', 'tool'], ['request + all answers so far']] },
-  { id: 's_rules', cx: 230, cy: 700, w: 400, h: 168, tone: 'bad', title: 'Coordinator never', chips: [['decides what is missing'], ['asks its own questions'], ['invents coordinates, places, phones']] },
-  { id: 's_status', cx: 400, cy: 1352, w: 500, h: 64, title: 'Read the status the scout agent returned' },
-  { id: 's_ready', cx: 190, cy: 1492, w: 210, h: 128, tone: 'ok', badge: ['ready', 'ok'], title: 'Reply in 2 short sentences', chips: [['what is prepared'], ['search tool runs next']] },
-  { id: 's_end2', kind: 'pill', tone: 'dark', cx: 190, cy: 1600, w: 120, h: 38, title: 'Done' },
-  { id: 's_failed', cx: 690, cy: 1492, w: 190, h: 100, tone: 'bad', badge: ['failed', 'bad'], title: 'Tell the problem', chips: [['1 sentence']] },
-  { id: 's_end3', kind: 'pill', tone: 'dark', cx: 690, cy: 1600, w: 120, h: 38, title: 'Done' },
-  { id: 's_q2', kind: 'diamond', cx: 470, cy: 1690, w: 270, h: 124, title: ['ask_user used', 'fewer than 3 times?'] },
-  { id: 's_limit', cx: 150, cy: 1806, w: 240, h: 92, tone: 'bad', title: 'Say what is still missing', chips: [['then stop', 'bad']] },
-  { id: 's_end4', kind: 'pill', tone: 'dark', cx: 150, cy: 1920, w: 120, h: 38, title: 'Done' },
-  { id: 's_ask', cx: 470, cy: 1842, w: 300, h: 104, tone: 'ask', title: 'Say 1 sentence, then call', chips: [['ask_user', 'tool'], ["scout agent's question, word for word"]] },
-  { id: 's_person', kind: 'pill', tone: 'ask', cx: 470, cy: 1982, w: 260, h: 54, title: 'Person answers' },
+  { id: 's_rules', cx: 230, cy: 930, w: 400, h: 168, tone: 'bad', title: 'Coordinator never', chips: [['decides what is missing'], ['asks its own questions'], ['asks for the position in words'], ['invents coordinates, places, phones']] },
+  { id: 's_status', cx: 400, cy: 1942, w: 500, h: 64, title: 'Read the status the scout agent returned' },
+  { id: 's_ready', cx: 190, cy: 2082, w: 210, h: 128, tone: 'ok', badge: ['ready', 'ok'], title: 'Reply in 2 short sentences', chips: [['count + best place'], ['near me → “near you”']] },
+  { id: 's_end2', kind: 'pill', tone: 'dark', cx: 190, cy: 2190, w: 120, h: 38, title: 'Done' },
+  { id: 's_failed', cx: 690, cy: 2082, w: 190, h: 100, tone: 'bad', badge: ['failed', 'bad'], title: 'Tell the problem', chips: [['1 sentence']] },
+  { id: 's_end3', kind: 'pill', tone: 'dark', cx: 690, cy: 2190, w: 120, h: 38, title: 'Done' },
+  { id: 's_q2', kind: 'diamond', cx: 470, cy: 2470, w: 270, h: 124, title: ['ask_user used', 'fewer than 3 times?'] },
+  { id: 's_limit', cx: 150, cy: 2586, w: 240, h: 92, tone: 'bad', title: 'Say what is still missing', chips: [['then stop', 'bad']] },
+  { id: 's_end4', kind: 'pill', tone: 'dark', cx: 150, cy: 2700, w: 120, h: 38, title: 'Done' },
+  { id: 's_ask', cx: 470, cy: 2622, w: 300, h: 104, tone: 'ask', title: 'Say 1 sentence, then call', chips: [['ask_user', 'tool'], ["scout agent's question, word for word"]] },
+  { id: 's_person', kind: 'pill', tone: 'ask', cx: 470, cy: 2762, w: 260, h: 54, title: 'Person answers' },
   // ---- Scout agent (scout.md)
-  { id: 'p_in', kind: 'pill', tone: 'dark', cx: 1130, cy: 365, w: 320, h: 56, title: 'Request + earlier answers' },
-  { id: 'p_fill', cx: 1130, cy: 485, w: 380, h: 120, title: 'Fill from what was actually said', chips: [['business_type'], ['area'], ['city'], ['null if not stated', 'ask']] },
-  { id: 'p_t1', kind: 'tag', tone: 'bad', cx: 1530, cy: 440, w: 310, h: 32, title: '✗  “near me” / “nearby” is not an area' },
-  { id: 'p_t2', kind: 'tag', tone: 'bad', cx: 1530, cy: 485, w: 310, h: 32, title: '✗  a city alone is not an area' },
-  { id: 'p_t3', kind: 'tag', tone: 'bad', cx: 1530, cy: 530, w: 310, h: 32, title: '✗  an area alone is not a city' },
-  { id: 'p_nulls', kind: 'diamond', cx: 1130, cy: 670, w: 340, h: 130, title: ['Is any of the 3', 'details null?'] },
-  { id: 'p_n1', cx: 1005, cy: 852, w: 230, h: 140, tone: 'ask', badge: ['needs_input', 'ask'], title: 'geocode is NOT called', chips: [['missing = the null ones'], ['question: 1 short sentence']] },
-  { id: 'p_geo', cx: 1340, cy: 830, w: 280, h: 110, title: 'Call geocode once', chips: [['area + city'], ['country only if not India']] },
-  { id: 'g', kind: 'tool', tone: 'tool', cx: 1650, cy: 830, w: 170, h: 70, title: 'geocode', chips: [['Google Maps', 'tool']] },
-  { id: 'p_res', kind: 'diamond', cx: 1340, cy: 990, w: 340, h: 130, title: ['What did geocode', 'return?'] },
-  { id: 'p_ready', cx: 1190, cy: 1183, w: 230, h: 184, tone: 'ok', badge: ['ready', 'ok'], title: 'args', chips: [['query “<biz> in <Area> <City>”'], ['lat, lng ← geocode only'], ['radius_m null | 2000'], ['lang “en”']] },
-  { id: 'p_n2', cx: 1625, cy: 1181, w: 220, h: 180, tone: 'ask', badge: ['needs_input', 'ask'], title: 'geocode is NOT called again', chips: [['missing = [area]'], ['ask: another spelling'], ['or a nearby landmark']] },
-  { id: 'p_fail', cx: 1400, cy: 1155, w: 150, h: 110, tone: 'bad', badge: ['failed', 'bad'], chips: [['problem = …'], ['from any step']] },
-  { id: 'R', cx: 1330, cy: 1352, w: 740, h: 100, title: 'Return the result to the coordinator', chips: [['status', 'tool'], ['business_type'], ['area'], ['city'], ['missing'], ['question'], ['args'], ['problem']] }
+  { id: 'p_in', kind: 'pill', tone: 'dark', cx: 1130, cy: 365, w: 320, h: 76, title: 'Request + earlier answers', chips: [['+ one line about the position', 'ok']] },
+  { id: 'p_fill', cx: 1130, cy: 715, w: 380, h: 120, title: 'Fill from what was actually said', chips: [['business_type'], ['area'], ['city'], ['null if not stated', 'ask']] },
+  { id: 'p_t1', kind: 'tag', tone: 'bad', cx: 1530, cy: 670, w: 310, h: 32, title: '✗  the words “near me” are never an area name' },
+  { id: 'p_t2', kind: 'tag', tone: 'bad', cx: 1530, cy: 715, w: 310, h: 32, title: '✗  a city alone is not an area' },
+  { id: 'p_t3', kind: 'tag', tone: 'bad', cx: 1530, cy: 760, w: 310, h: 32, title: '✗  an area alone is not a city' },
+  { id: 'p_nulls', kind: 'diamond', cx: 1130, cy: 900, w: 340, h: 130, title: ['Is any of the 3', 'details null?'] },
+  { id: 'p_n1', cx: 1005, cy: 1082, w: 230, h: 140, tone: 'ask', badge: ['needs_input', 'ask'], title: 'geocode is NOT called', chips: [['missing = the null ones'], ['question: 1 short sentence']] },
+  { id: 'p_geo', cx: 1340, cy: 1060, w: 280, h: 110, title: 'Call geocode once', chips: [['area + city'], ['country only if not India']] },
+  { id: 'g', kind: 'tool', tone: 'tool', cx: 1665, cy: 1060, w: 200, h: 100, title: 'geocode', chips: [['Google Maps', 'tool'], ['pin ≤ 50 km of city', 'tool']] },
+  { id: 'p_res', kind: 'diamond', cx: 1340, cy: 1220, w: 340, h: 130, title: ['What did geocode', 'return?'] },
+  { id: 'R', cx: 1730, cy: 1942, w: 1540, h: 100, title: 'Return the result to the coordinator', chips: [['status', 'tool'], ['business_type'], ['area'], ['city'], ['missing'], ['question'], ['args'], ['search'], ['use_device_location'], ['problem']] },
+  // ---- Scout, the near-me way: the AI decides by meaning, the last line of the input says what the app holds
+  { id: 'p_dev', kind: 'diamond', cx: 1130, cy: 520, w: 480, h: 160, title: ['Near me?', 'the AI decides by meaning:', 'places around the person, no place named'] },
+  { id: 'n_line', kind: 'diamond', cx: 2190, cy: 520, w: 440, h: 150, title: ['Last line', 'of the input?'] },
+  { id: 'n_a', cx: 1950, cy: 730, w: 250, h: 170, tone: 'ok', badge: ['available', 'ok'], title: 'ready · the code searches', chips: [['use_device_location = true', 'ok'], ['geocode: NOT called', 'bad'], ['area, city: NOT needed', 'bad']] },
+  { id: 'n_none', cx: 2205, cy: 770, w: 220, h: 200, tone: 'ask', badge: ['no such line', 'ask'], title: 'needs_input', chips: [['missing = [location]'], ['no question, no tool'], ['coordinator asks the browser', 'ask']] },
+  { id: 'n_off', cx: 2450, cy: 770, w: 250, h: 220, tone: 'ask', badge: ['not available', 'ask'], title: 'needs_input', chips: [['missing = area (+ city)'], ['question in words'], ['never asks for location again', 'bad']] },
+  { id: 'n_note', kind: 'tag', tone: 'neutral', cx: 2190, cy: 405, w: 560, h: 32, title: 'the AI never sees the position: the app holds it, the code uses it' },
+  // ---- Coordinator: the browser branch
+  { id: 's_loc', kind: 'diamond', cx: 470, cy: 2290, w: 250, h: 110, title: ['missing =', '[location]?'] },
+  { id: 's_browser', cx: 700, cy: 2410, w: 180, h: 140, tone: 'ask', title: 'Say 1 sentence, then call', chips: [['ask_browser', 'tool'], ['once per request'], ['Allow · button · type']] },
+  // ---- the search (gosom) and what can come back, drawn in full
+  { id: 'p_search', cx: 1340, cy: 1410, w: 300, h: 124, title: 'Call search_places once', chips: [['query “<biz> in <Area> <City>”'], ['lat, lng ← geocode only'], ['radius_m null · lang “en” unless said']] },
+  { id: 'gm', kind: 'tool', tone: 'tool', cx: 1650, cy: 1410, w: 170, h: 70, title: 'search_places', chips: [['gosom · Google Maps', 'tool']] },
+  { id: 'p_found', kind: 'diamond', cx: 1340, cy: 1600, w: 320, h: 124, title: ['What did the', 'search return?'] },
+  { id: 'p_ready', cx: 1135, cy: 1770, w: 220, h: 160, tone: 'ok', badge: ['ready', 'ok'], title: 'args + the search', chips: [['places found (1 to 20)'], ['stored by id: count, best'], ['pin = the one geocode gave']] },
+  { id: 'p_zero', cx: 1340, cy: 1774, w: 180, h: 158, tone: 'ask', badge: ['needs_input', 'ask'], title: '0 places found', chips: [['missing = [area]'], ['ask: a bigger'], ['or nearby area']] },
+  { id: 'p_fail', cx: 1565, cy: 1770, w: 160, h: 130, tone: 'bad', badge: ['failed', 'bad'], title: 'search tool broke', chips: [['problem = the error']] },
+  { id: 'p_n2', cx: 1650, cy: 1235, w: 220, h: 180, tone: 'ask', badge: ['needs_input', 'ask'], title: 'geocode is NOT called again', chips: [['missing = [area]'], ['ask: another spelling'], ['or a nearby landmark']] },
+  { id: 'n_step', cx: 1990, cy: 955, w: 310, h: 124, title: 'The code calls search_places once', chips: [['query = the type alone: “gyms”'], ['lat, lng: the held pin, no geocode'], ['radius_m null · lang “en” unless said']] },
+  { id: 'n_tool', kind: 'tool', tone: 'tool', cx: 1990, cy: 1110, w: 200, h: 70, title: 'search_places', chips: [['gosom · Google Maps', 'tool']] },
+  { id: 'n_found', kind: 'diamond', cx: 1990, cy: 1270, w: 250, h: 124, title: ['What did the', 'search return?'] },
+  { id: 'n_okbox', cx: 1850, cy: 1465, w: 130, h: 130, tone: 'ok', badge: ['ready', 'ok'], title: 'places found', chips: [['stored by id'], ['count + best']] },
+  { id: 'n_zerobox', cx: 1990, cy: 1660, w: 190, h: 130, tone: 'ask', badge: ['needs_input', 'ask'], title: '0 places found', chips: [['missing = area, city'], ['ask in words']] },
+  { id: 'n_failbox', cx: 2125, cy: 1455, w: 110, h: 110, tone: 'bad', badge: ['failed', 'bad'], title: 'tool broke', chips: [['the error']] },
+  { id: 'n_type', kind: 'tag', tone: 'neutral', cx: 1530, cy: 578, w: 300, h: 32, title: 'no kind of place named → asks for it first' },
+  { id: 'n_final', kind: 'tag', tone: 'neutral', cx: 1730, cy: 2040, w: 880, h: 32, title: 'code check 1 (finalize): near me follows what the app really holds · missing = the empty details · ready needs a pin' },
+  { id: 'n_code', kind: 'tag', tone: 'neutral', cx: 1730, cy: 2084, w: 880, h: 32, title: 'code check 2 (complete): the pin is the real one, the search really ran (or runs here), the status follows the outcome' },
+  { id: 'n_store', kind: 'tag', tone: 'neutral', cx: 1730, cy: 2128, w: 880, h: 32, title: 'full results are stored by id and shown by the page (GET /api/searches/id): no model reads them' },
 ];
 // pts are absolute; tone colours the edge by the outcome it leads to
 const EDGES = [
@@ -116,38 +141,70 @@ const EDGES = [
   { id: 'chat_end', pts: [[170, 410], [170, 465]] },
   { id: 'yes', pts: [[480, 295], [480, 333]], label: ['YES', 520, 314] },
   { id: 'call', pts: [[650, 365], [976, 365]], label: ['scout_agent( request + all answers )', 815, 343], tone: 'neutral', bold: true },
-  { id: 'wait', pts: [[480, 437], [480, 1318]], dashed: true, label: ['Coordinator waits for the scout agent', 480, 900] },
-  { id: 'in_fill', pts: [[1130, 393], [1130, 425]] },
-  { id: 'fill_nulls', pts: [[1130, 545], [1130, 605]] },
-  { id: 'null_yes', pts: [[960, 670], [940, 670], [940, 782]], tone: 'ask', label: ['YES · a detail is null', 1040, 748] },
-  { id: 'null_no', pts: [[1130, 735], [1130, 756], [1340, 756], [1340, 775]], label: ['NO · all three known', 1262, 738] },
-  { id: 'geo_tool', pts: [[1480, 830], [1565, 830]], dashed: true, both: true, labels: [['area, city', 1522, 806], ['pin | error', 1522, 856]] },
-  { id: 'geo_res', pts: [[1340, 885], [1340, 925]] },
-  { id: 'pin', pts: [[1170, 990], [1150, 990], [1150, 1091]], tone: 'ok', label: ['A PIN', 1108, 968] },
-  { id: 'err', pts: [[1510, 990], [1625, 990], [1625, 1091]], tone: 'ask', label: ['ERROR', 1568, 968] },
-  { id: 'unexp', pts: [[1340, 1055], [1340, 1078], [1400, 1078], [1400, 1100]], tone: 'bad', dashed: true, label: ['unexpected problem', 1245, 1070] },
-  { id: 'n1_R', pts: [[1005, 922], [1005, 1301]], tone: 'ask' },
-  { id: 'ready_R', pts: [[1190, 1275], [1190, 1301]], tone: 'ok' },
-  { id: 'fail_R', pts: [[1400, 1210], [1400, 1301]], tone: 'bad' },
-  { id: 'n2_R', pts: [[1625, 1271], [1625, 1301]], tone: 'ask' },
-  { id: 'return', pts: [[960, 1352], [652, 1352]], bold: true, label: ['result { status, … }', 890, 1330] },
-  { id: 'ready_out', pts: [[190, 1384], [190, 1428]], tone: 'ok', label: ['status = ready', 190, 1406] },
-  { id: 'needs', pts: [[470, 1384], [470, 1628]], tone: 'ask', label: ['status = needs_input', 470, 1420] },
-  { id: 'failed_out', pts: [[610, 1384], [610, 1442]], tone: 'bad', label: ['status = failed', 662, 1409] },
-  { id: 'ready_end', pts: [[190, 1556], [190, 1581]], tone: 'ok' },
-  { id: 'failed_end', pts: [[690, 1542], [690, 1581]], tone: 'bad' },
-  { id: 'q2_yes', pts: [[470, 1752], [470, 1790]], tone: 'ask', label: ['YES · asked 0, 1 or 2 times', 600, 1771] },
-  { id: 'q2_no', pts: [[335, 1690], [150, 1690], [150, 1760]], tone: 'bad', label: ['NO · asked 3 times', 238, 1668] },
-  { id: 'ask_person', pts: [[470, 1894], [470, 1955]], tone: 'ask' },
-  { id: 'loop', pts: [[600, 1982], [805, 1982], [805, 417], [652, 417]], tone: 'ask', label: ['call scout_agent again · request + the answer', 805, 1140] },
-  { id: 'limit_end', pts: [[150, 1852], [150, 1901]], tone: 'bad' }
+  { id: 'wait', pts: [[480, 437], [480, 1908]], dashed: true, label: ['Coordinator waits for the scout agent', 480, 1100] },
+  { id: 'fill_nulls', pts: [[1130, 775], [1130, 835]] },
+  { id: 'null_yes', pts: [[960, 900], [940, 900], [940, 1012]], tone: 'ask', label: ['YES · a detail is null', 1040, 978] },
+  { id: 'null_no', pts: [[1130, 965], [1130, 986], [1340, 986], [1340, 1005]], label: ['NO · all three known', 1262, 968] },
+  { id: 'geo_tool', pts: [[1480, 1060], [1565, 1060]], dashed: true, both: true, labels: [['area, city', 1522, 1036], ['pin | error', 1522, 1086]] },
+  { id: 'geo_res', pts: [[1340, 1115], [1340, 1155]] },
+  { id: 'n1_R', pts: [[1005, 1152], [1005, 1891]], tone: 'ask' },
+  { id: 'return', pts: [[960, 1942], [652, 1942]], bold: true, label: ['result { status, … }', 890, 1920] },
+  { id: 'ready_out', pts: [[190, 1974], [190, 2018]], tone: 'ok', label: ['status = ready', 190, 1996] },
+  { id: 'needs', pts: [[470, 1974], [470, 2235]], tone: 'ask', label: ['status = needs_input', 470, 2010] },
+  { id: 'failed_out', pts: [[610, 1974], [610, 2032]], tone: 'bad', label: ['status = failed', 662, 1999] },
+  { id: 'ready_end', pts: [[190, 2146], [190, 2171]], tone: 'ok' },
+  { id: 'failed_end', pts: [[690, 2132], [690, 2171]], tone: 'bad' },
+  { id: 'q2_yes', pts: [[470, 2532], [470, 2570]], tone: 'ask', label: ['YES · asked 0, 1 or 2 times', 600, 2551] },
+  { id: 'q2_no', pts: [[335, 2470], [150, 2470], [150, 2540]], tone: 'bad', label: ['NO · asked 3 times', 238, 2448] },
+  { id: 'ask_person', pts: [[470, 2674], [470, 2735]], tone: 'ask' },
+  { id: 'loop', pts: [[600, 2762], [805, 2762], [805, 417], [652, 417]], tone: 'ask', label: ['call scout_agent again · request + the answer', 805, 1255] },
+  { id: 'limit_end', pts: [[150, 2632], [150, 2681]], tone: 'bad' },
+  // ---- the near-me split, its three outcomes, and the browser branch
+  { id: 'in_dev', pts: [[1130, 403], [1130, 440]] },
+  { id: 'dev_no', pts: [[1130, 600], [1130, 655]], label: ['NO · a named place → as before', 1130, 628] },
+  { id: 'dev_yes', pts: [[1370, 520], [1970, 520]], tone: 'ok', bold: true, label: ['YES · near me', 1670, 496] },
+  { id: 'ln_a', pts: [[2060, 551], [1950, 551], [1950, 645]], tone: 'ok', label: ['“DEVICE LOCATION: available”', 1800, 600] },
+  { id: 'ln_none', pts: [[2190, 595], [2190, 640], [2205, 640], [2205, 670]], tone: 'ask', label: ['(no line yet)', 2128, 625] },
+  { id: 'ln_off', pts: [[2410, 520], [2450, 520], [2450, 660]], tone: 'ask', label: ['“… not available”', 2520, 590] },
+  { id: 'loc_yes', pts: [[595, 2290], [700, 2290], [700, 2340]], tone: 'ask', label: ['YES · the location', 650, 2268] },
+  { id: 'loc_no', pts: [[470, 2345], [470, 2408]], tone: 'ask', label: ['NO · a detail in words', 365, 2376] },
+  { id: 'browser_loop', pts: [[790, 2410], [805, 2410]], tone: 'ask' },
+  // ---- geocode's pin -> the search -> its outcomes -> the result
+  { id: 'pin', pts: [[1340, 1285], [1340, 1348]], tone: 'ok', label: ['A PIN', 1388, 1318] },
+  { id: 'err', pts: [[1510, 1220], [1540, 1220]], tone: 'ask', label: ['ERROR', 1468, 1178] },
+  { id: 'srch_tool', pts: [[1490, 1410], [1565, 1410]], dashed: true, both: true, labels: [['query, pin', 1528, 1386], ['places | error', 1528, 1436]] },
+  { id: 'srch_res', pts: [[1340, 1472], [1340, 1538]] },
+  { id: 'found', pts: [[1180, 1600], [1135, 1600], [1135, 1688]], tone: 'ok', label: ['PLACES FOUND', 1108, 1578] },
+  { id: 'zero', pts: [[1340, 1662], [1340, 1693]], tone: 'ask', label: ['0 PLACES', 1392, 1678] },
+  { id: 'serr', pts: [[1500, 1600], [1565, 1600], [1565, 1703]], tone: 'bad', label: ['ERROR', 1572, 1578] },
+  { id: 'ready_R', pts: [[1135, 1850], [1135, 1891]], tone: 'ok' },
+  { id: 'zero_R', pts: [[1340, 1853], [1340, 1891]], tone: 'ask' },
+  { id: 'fail_R', pts: [[1565, 1835], [1565, 1891]], tone: 'bad' },
+  { id: 'n2_R', pts: [[1760, 1235], [1775, 1235], [1775, 1891]], tone: 'ask' },
+  { id: 'a_step', pts: [[1990, 815], [1990, 893]], tone: 'ok' },
+  { id: 'n_tool_e', pts: [[1990, 1017], [1990, 1075]], dashed: true, both: true, labels: [['type + pin', 1925, 1046], ['places | error', 2078, 1046]] },
+  { id: 'n_res', pts: [[1990, 1145], [1990, 1208]] },
+  { id: 'n_ok', pts: [[1865, 1270], [1850, 1270], [1850, 1400]], tone: 'ok', label: ['FOUND', 1820, 1245] },
+  { id: 'n_zero', pts: [[1990, 1332], [1990, 1595]], tone: 'ask', label: ['0 PLACES', 2045, 1362] },
+  { id: 'n_err', pts: [[2115, 1270], [2125, 1270], [2125, 1400]], tone: 'bad', label: ['ERROR', 2150, 1245] },
+  { id: 'n_ok_R', pts: [[1850, 1530], [1850, 1891]], tone: 'ok' },
+  { id: 'n_zero_R', pts: [[1990, 1725], [1990, 1891]], tone: 'ask' },
+  { id: 'n_err_R', pts: [[2125, 1510], [2125, 1891]], tone: 'bad' },
+  { id: 'none_R', pts: [[2205, 870], [2205, 1891]], tone: 'ask' },
+  { id: 'off_R', pts: [[2450, 880], [2450, 1891]], tone: 'ask' },
 ];
 const PATHS = [
-  { id: 'happy', name: 'All details given', end: 'ok', edges: 'msg_q1 yes call wait in_fill fill_nulls null_no geo_tool geo_res pin ready_R return ready_out ready_end', nodes: 's_msg s_q1 s_call p_in p_fill p_nulls p_geo g p_res p_ready R s_status s_ready s_end2' },
-  { id: 'missing', name: 'A detail is missing', end: 'ask', edges: 'msg_q1 yes call wait in_fill fill_nulls null_yes n1_R return needs q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_fill p_nulls p_n1 R s_status s_q2 s_ask s_person' },
-  { id: 'unknown', name: 'Area not found', end: 'ask', edges: 'msg_q1 yes call wait in_fill fill_nulls null_no geo_tool geo_res err n2_R return needs q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_fill p_nulls p_geo g p_res p_n2 R s_status s_q2 s_ask s_person' },
-  { id: 'three', name: 'Asked 3 times', end: 'bad', edges: 'msg_q1 yes call wait in_fill fill_nulls null_yes n1_R return needs q2_no limit_end', nodes: 's_msg s_q1 s_call p_in p_fill p_nulls p_n1 R s_status s_q2 s_limit s_end4' },
-  { id: 'problem', name: 'Unexpected problem', end: 'bad', edges: 'msg_q1 yes call wait in_fill fill_nulls null_no geo_tool geo_res unexp fail_R return failed_out failed_end', nodes: 's_msg s_q1 s_call p_in p_fill p_nulls p_geo g p_res p_fail R s_status s_failed s_end3' },
+  { id: 'happy', name: 'Named place · all details given', end: 'ok', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_no geo_tool geo_res pin srch_tool srch_res found ready_R return ready_out ready_end', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_geo g p_res p_search gm p_found p_ready R n_final s_status s_ready s_end2 n_code n_store' },
+  { id: 'nearme', name: 'Near me · position held', end: 'ok', edges: 'msg_q1 yes call wait in_dev dev_yes ln_a a_step n_tool_e n_res n_ok n_ok_R return ready_out ready_end', nodes: 's_msg s_q1 s_call p_in p_dev n_line n_a n_note n_step n_tool n_found n_okbox R n_final s_status s_ready s_end2 n_code n_store' },
+  { id: 'locneeded', name: 'Near me · ask the browser', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_yes ln_none none_R return needs loc_yes browser_loop loop', nodes: 's_msg s_q1 s_call p_in p_dev n_line n_none R n_final s_status s_loc s_browser' },
+  { id: 'nearme_off', name: 'Near me · not available', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_yes ln_off off_R return needs loc_no q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_dev n_line n_off R n_final s_status s_loc s_q2 s_ask s_person' },
+  { id: 'nearme_zero', name: 'Near me · search found nothing', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_yes ln_a a_step n_tool_e n_res n_zero n_zero_R return needs loc_no q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_dev n_line n_a n_step n_tool n_found n_zerobox R n_final s_status s_loc s_q2 s_ask s_person' },
+  { id: 'nearme_fail', name: 'Near me · search tool broke', end: 'bad', edges: 'msg_q1 yes call wait in_dev dev_yes ln_a a_step n_tool_e n_res n_err n_err_R return failed_out failed_end', nodes: 's_msg s_q1 s_call p_in p_dev n_line n_a n_step n_tool n_found n_failbox R n_final s_status s_failed s_end3' },
+  { id: 'missing', name: 'A detail is missing', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_yes n1_R return needs loc_no q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_n1 R n_final s_status s_loc s_q2 s_ask s_person' },
+  { id: 'unknown', name: 'Area not found', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_no geo_tool geo_res err n2_R return needs loc_no q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_geo g p_res p_n2 R n_final s_status s_loc s_q2 s_ask s_person' },
+  { id: 'zero', name: 'Search found nothing', end: 'ask', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_no geo_tool geo_res pin srch_tool srch_res zero zero_R return needs loc_no q2_yes ask_person loop', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_geo g p_res p_search gm p_found p_zero R n_final s_status s_loc s_q2 s_ask s_person' },
+  { id: 'three', name: 'Asked 3 times', end: 'bad', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_yes n1_R return needs loc_no q2_no limit_end', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_n1 R n_final s_status s_loc s_q2 s_limit s_end4' },
+  { id: 'problem', name: 'Search tool broke', end: 'bad', edges: 'msg_q1 yes call wait in_dev dev_no fill_nulls null_no geo_tool geo_res pin srch_tool srch_res serr fail_R return failed_out failed_end', nodes: 's_msg s_q1 s_call p_in p_dev p_fill p_nulls p_geo g p_res p_search gm p_found p_fail R n_final s_status s_failed s_end3' },
   { id: 'notplace', name: 'Not a place request', end: 'neutral', edges: 'msg_q1 no chat_end', nodes: 's_msg s_q1 s_chat s_end1' }
 ];
 
@@ -157,7 +214,7 @@ for (const [k, c] of Object.entries(EDGE)) {
   const m = mk('marker', { id: 'ar-' + k, viewBox: '0 0 10 10', refX: 8.5, refY: 5, markerWidth: 7.5, markerHeight: 7.5, orient: 'auto-start-reverse' }, defs);
   mk('path', { d: 'M1 1 L9 5 L1 9 z', fill: c }, m);
 }
-const H = 2070;
+const H = 2830;
 LANES.forEach(l => {
   mk('rect', { x: l.x, y: 20, width: l.w, height: H - 50, rx: 24, fill: 'rgba(255,255,255,.6)', stroke: '#e2e8f0' });
   const t = mk('text', { x: l.x + 26, y: 56, 'font-size': 21, 'font-weight': 600, fill: '#334155', 'font-family': 'Spectral, Georgia, serif' }, svg, l.title);
@@ -247,7 +304,7 @@ function drawNode(n) {
 EDGES.forEach(drawEdge);
 NODES.forEach(drawNode);
 // the dashed link that ties the "never guess" stamps to the fill step
-mk('path', { d: 'M1320 485 L1372 485', stroke: '#fb7185', 'stroke-width': 1.6, 'stroke-dasharray': '4 3', fill: 'none' }, edgeLayer);
+mk('path', { d: 'M1320 715 L1372 715', stroke: '#fb7185', 'stroke-width': 1.6, 'stroke-dasharray': '4 3', fill: 'none' }, edgeLayer);
 
 // ---------- legend and path buttons ----------
 const legend = document.getElementById('legend');

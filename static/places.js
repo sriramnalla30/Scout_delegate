@@ -124,7 +124,7 @@ function build(host, doc) {
   add(root, add(el('div', undefined, 'pl-top'),
     el('div', 'GOOGLE MAPS · ' + places.length + ' PLACES', 'tag'),
     el('h3', a.query),
-    el('p', `Around ${a.lat}, ${a.lng}${radius} · fetched ${ago(doc.viewed_at - doc.created_at)} · took ${(doc.elapsed_ms / 1000).toFixed(1)} s`, 'pl-sub')));
+    el('p', `Around ${a.pin === 'device' ? 'your location' : a.lat + ', ' + a.lng}${radius} · fetched ${ago(doc.viewed_at - doc.created_at)} · took ${(doc.elapsed_ms / 1000).toFixed(1)} s`, 'pl-sub')));
 
   const kpi = (label, v, hint) => add(el('div', undefined, 'pl-kpi'), el('b', v), el('span', label), hint ? el('small', hint) : null);
   add(root, add(el('div', undefined, 'pl-kpis'),

@@ -15,8 +15,8 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from app import access, auth, config, observability, places, searches, store
-from app.coordinator import forget_thread, stream_events, thread_state
+from app import access, auth, config, location, observability, places, searches, store
+from app.coordinator import forget_thread, pending_kind, stream_events, thread_state
 
 STATIC = Path(__file__).resolve().parent.parent / 'static'
 FILES = {'/': ('index.html', 'text/html'), '/config.js': ('config.js', 'text/javascript'), '/app.js': ('app.js', 'text/javascript'),
@@ -229,14 +229,23 @@ async def chat(request: Request):
     thread_id, message = str(body.get('thread_id', '')), str(body.get('message', '')).strip()
     if not THREAD_ID.match(thread_id):
         return JSONResponse({'error': 'thread_id must be 8-64 letters, digits, - or _.'}, status_code=400)
-    if not message or len(message) > 1000:
+    # The answer to an ask_browser pause is the person's position (`location`) or the reason there is none (`location_error`),
+    # in a field of its own and never inside the message, so no model and no trace ever sees the numbers.
+    answers_browser = body.get('location') is not None or body.get('location_error') is not None
+    if len(message) > 1000 or not (message or answers_browser):
         return JSONResponse({'error': 'Write a message of 1 to 1000 characters.'}, status_code=400)
     if not auth.claim_thread(thread_id, user['id']):  # a conversation belongs to the account that started it
         return JSONResponse({'error': 'This chat belongs to another account.'}, status_code=403)
+    extra = {}  # only an answer to ask_browser carries more than the message
+    if answers_browser:
+        if await asyncio.to_thread(pending_kind, thread_id) != 'browser':
+            return JSONResponse({'error': 'The app is not waiting for a location.'}, status_code=409)
+        position = location.clean(body.get('location'))  # a value that is not a usable position counts as "could not find you"
+        extra = {'position': position, 'position_error': None if position else str(body.get('location_error') or 'unavailable')[:20]}
 
     def events():
         try:
-            for event in stream_events(thread_id, message):
+            for event in stream_events(thread_id, '' if answers_browser else message, **extra):
                 yield sse(event)
         except Exception as error:  # surface a readable message instead of dropping the stream
             logger.warning('chat turn failed for thread %s: %s: %s', thread_id, type(error).__name__, str(error)[:1500])  # the person sees a short message; the host's log keeps the cause

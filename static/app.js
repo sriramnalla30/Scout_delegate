@@ -6,10 +6,12 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') :
 // Every API call goes through auth.js, which adds the signed-in account's token. The API may live on another site (config.js).
 // The server files chats under the account, so a signed-in person only ever sees their own history.
 const api = (path, options) => Auth.fetch(path, options);
-let threadId = newId(), waiting = false, busy = false, typingEl = null, locked = false;
+let threadId = newId(), waiting = false, busy = false, typingEl = null, locked = false, locating = null;  // locating: the open "asking your device" card
 // Live events are revealed one at a time so a person can follow them; reopening a saved chat skips the pacing.
 const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const PAUSE = { thought: 900, tool_call: 1100, tool_result: 1100, sub: 950, interrupt: 300, message: 300, error: 300, done: 0 };
+const PAUSE = { thought: 900, tool_call: 1100, tool_result: 1100, sub: 950, interrupt: 300, browser: 300, message: 300, error: 300, done: 0 };
+// "Near me": the coordinator asks the browser for the position. Chrome's own timeout starts only after the person taps Allow, so the page keeps its own clock.
+const LOCATE_BUTTON_MS = 10000, LOCATE_WAIT_MS = 12000;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let live = false, queue = [], draining = null;
 
@@ -84,7 +86,7 @@ async function openChat(id) {
   if (busy) return;
   let chat; try { const r = await api('/api/chats/' + id); if (!r.ok) throw Error(); chat = await r.json(); } catch (e) { return; }
   clearScreen(); threadId = id; current = chat; started(); syncSession(); setDrawer(false);
-  chat.log.forEach(e => { if (e.u !== undefined) { addUser(e.u); thinkReset(); think('Reading your message', short(e.u, 120)); } else handle(e.ev); });
+  chat.log.forEach(e => { if (e.u !== undefined) { addUser(e.u); turnWork = ''; think('You asked', short(e.u, 120), 'turn'); } else handle(e.ev); });  // the timeline keeps every message's steps
   thinkDone(); hideTyping();
   try { const s = await (await api('/api/thread/' + id)).json(); locked = !s.exists; waiting = !!s.waiting; } catch (e) { locked = true; }
   setBusy(false); renderHistory();
@@ -110,18 +112,43 @@ function scrollDown() { window.scrollTo({ top: document.body.scrollHeight, behav
 function started() { $('.chatcol').classList.add('started'); $('.tracecol').classList.add('thinking'); }
 
 function addUser(text) { started(); const m = el('div', undefined, 'msg user'); m.append(el('div', text, 'bubble')); $('#thread').append(m); scrollDown(); }
+// Every message of the agents has a heading that says what was done, so no message is just "Coordinator".
+// It is built from what the agents really did (the scout agent's report), never from reading the person's words.
+let turnWork = '';  // what the agents did for the message being shown: '' (nothing), 'found' or 'failed'
+let askMissing = [];  // what the scout agent said it still needs: it decides the heading of the question
+let lastType = '';  // the kind of place of the last search in this chat: a later reply can refer to it
+const HEAD = {
+  working: ['🔎', 'Agents are on it'], device: ['📍', 'Asking your device where you are'], deviceNote: ['📍', 'Asked your device where you are'],
+  pick: ['⭐', 'The agents’ top pick'], wrong: ['⚠️', 'Here’s what went wrong'], snag: ['⚠️', 'The agents hit a snag'], quick: ['💬', 'One quick question'], hello: ['👋', 'Hello from Scout']
+};
+const DEVICE_HEAD = { 'location shared': ['📍', 'Got your location'], 'location blocked': ['🚫', 'Location is blocked'], 'not shared': ['📵', 'This browser can’t share a location'], 'no answer': ['⏳', 'Your device did not answer'], 'typed instead': ['✍️', 'You typed the place instead'] };
+function head([icon, text]) { const h = el('div', undefined, 'who'); h.append(el('span', icon, 'wi'), document.createTextNode(text)); return h; }
+function setHead(h, [icon, text]) { h.replaceChildren(el('span', icon, 'wi'), document.createTextNode(text)); }
+function askHead() {
+  if (askMissing.includes('business_type')) return ['🔎', 'What should the agents look for?'];
+  if (askMissing.includes('area')) return ['📍', 'Where should the agents search?'];
+  if (askMissing.includes('city')) return ['🏙️', 'Which city should the agents search?'];
+  return HEAD.quick;
+}
+function replyHead() { return turnWork === 'found' ? HEAD.pick : turnWork === 'failed' ? HEAD.wrong : lastType ? ['💬', `About your “${lastType}” search`] : HEAD.hello; }
+function foundHead(data) {
+  const a = data.args || {}, near = data.use_device_location || a.pin === 'device', n = data.search && data.search.count;
+  const kind = data.business_type || a.query || 'places', where = near ? ' around you' : data.area && data.city ? ` in ${data.area}, ${data.city}` : '';
+  return [near ? '📍' : '🗺️', `Agents brought back ${n ? (n === 1 ? '1 place' : n + ' places') : 'places'} for “${kind}”${where}`];
+}
+
 function addBot(text, kind) {
   started(); const m = el('div', undefined, 'msg bot' + (kind ? ' ' + kind : ''));
   const b = el('div', undefined, 'bubble'), body = kind === 'ask' ? el('div') : b;
   if (kind === 'ask') b.append(el('div', 'needs your input', 'tag'), body);
-  m.append(el('div', 'Coordinator', 'who'), b); $('#thread').append(m); scrollDown();
+  m.append(head(kind === 'ask' ? askHead() : replyHead()), b); $('#thread').append(m); scrollDown();
   if (!live || REDUCED) { body.textContent = text; return Promise.resolve(); }
   return new Promise(done => { // type the reply out, like someone writing it
     let i = 0; const step = Math.max(1, Math.ceil(text.length / 90));
     const timer = setInterval(() => { i = Math.min(text.length, i + step); body.textContent = text.slice(0, i); scrollDown(); if (i >= text.length) { clearInterval(timer); done(); } }, 22);
   });
 }
-function showTyping() { hideTyping(); typingEl = el('div', undefined, 'msg bot'); const t = el('div', undefined, 'bubble'); const dots = el('span', undefined, 'typing'); dots.append(el('i'), el('i'), el('i')); t.append(dots); typingEl.append(el('div', 'Coordinator', 'who'), t); $('#thread').append(typingEl); scrollDown(); }
+function showTyping() { hideTyping(); typingEl = el('div', undefined, 'msg bot'); const t = el('div', undefined, 'bubble'); const dots = el('span', undefined, 'typing'); dots.append(el('i'), el('i'), el('i')); t.append(dots); typingEl.append(head(HEAD.working), t); $('#thread').append(typingEl); scrollDown(); }
 function hideTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
 
 function kvRow(label, value) { const r = el('div', undefined, 'kv'); r.append(el('span', label), el('b', value)); return r; }
@@ -132,29 +159,53 @@ function addResult(data) {
   if (found) card.append(el('summary', 'How the scout agent built this search'));
   else card.append(el('div', failed ? 'scout agent could not finish' : 'scout agent report', 'tag'), el('h3', failed ? 'Search request' : a.query));
   if (failed) card.append(el('p', data.problem || 'Unknown problem.', 'problem'));
-  card.append(kvRow('business', data.business_type || '-'), kvRow('area', data.area || '-'), kvRow('city', data.city || '-'));
+  const near = data.use_device_location || a.pin === 'device';  // a search around the person's own position: the numbers are never shown
+  const top = el('div', undefined, 'msg bot'); top.append(head(found ? foundHead(data) : HEAD.snag));
+  card.append(kvRow('business', data.business_type || '-'), kvRow('area', data.area || (near ? 'around you' : '-')), kvRow('city', data.city || (near ? 'where you are' : '-')));
   if (!failed && a.query) {
     card.append(el('div', 'tool arguments', 'args-title'), el('pre', JSON.stringify(a, null, 2), 'args'));
-    const parts = ['gmaps', '-fast-mode', '-json', '-c 1', `-geo "${a.lat},${a.lng}"`];
+    const parts = ['gmaps', '-fast-mode', '-json', '-c 1', `-geo "${near ? 'your position' : a.lat + ',' + a.lng}"`];
     if (a.radius_m != null) parts.push('-radius ' + a.radius_m);
     if (a.lang && a.lang !== 'en') parts.push('-lang ' + a.lang);
     parts.push('-input q.txt');
     card.append(el('div', 'as a command', 'args-title'), el('pre', parts.join(' ') + '\n# q.txt: ' + a.query, 'cmd'));
   }
-  if (!found) { $('#thread').append(card); scrollDown(); return Promise.resolve(); }
-  const host = el('div', undefined, 'places-host'); $('#thread').append(host, card);
+  if (!found) { top.append(card); $('#thread').append(top); scrollDown(); return Promise.resolve(); }
+  const host = el('div', undefined, 'places-host'); top.append(host); $('#thread').append(top, card);
   return window.Places.render(host, data.search.id).then(scrollDown);
 }
 
 function short(value, n = 150) { const s = typeof value === 'string' ? value : JSON.stringify(value); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 // "Coordinator is thinking": a running timeline of decisions in plain words. The newest item pulses until the next one arrives.
-const FIELD_NAMES = { business_type: 'the type of place', area: 'the area', city: 'the city' };
+const FIELD_NAMES = { business_type: 'the type of place', area: 'the area', city: 'the city', location: 'where you are' };
 const THINK_IDLE = 'Send a message and the coordinator\'s decisions show up here, step by step.';
+let askingStep = null;  // the timeline line for "asking your device": it changes when the device answers
+let waitingStep = null;  // the timeline line for a question to the person: it changes when they answer
 function think(title, detail, cls) {
   const list = $('#think'); list.querySelectorAll('li.idle').forEach(li => li.remove());
   list.querySelectorAll('li.active').forEach(li => li.classList.remove('active'));
   const li = el('li', undefined, 'active ' + (cls || '')); li.append(el('i'));
   const d = el('div'); d.append(el('b', title)); if (detail) d.append(el('span', detail)); li.append(d); list.append(li); list.scrollTop = list.scrollHeight;
+  return li;
+}
+// Change a line that is already in the timeline (title, detail, and whether it still looks like a question to the person).
+function stepText(li, title, detail, cls) {
+  const d = li.querySelector('div'); if (!d) return;
+  if (title !== undefined) d.querySelector('b').textContent = title;
+  if (detail !== undefined) { let s = d.querySelector('span'); if (!s) { s = el('span'); d.append(s); } s.textContent = detail; }
+  if (cls !== undefined) li.classList.toggle('ask', cls === 'ask');
+}
+// What the person did, in words, from the one sentence the coordinator got back (never the position itself).
+function deviceOutcome(sentence) {
+  const s = String(sentence || '');
+  if (s.startsWith('Position received')) return ['You allowed your location', 'The search runs around you. The position is used for this search only.'];
+  if (s.startsWith('The person typed instead')) return ['You typed the place instead', short(s.slice('The person typed instead: '.length).replace(/\.$/, ''), 80)];
+  if (s.includes('blocked')) return ['Location is blocked for this site', 'I\'ll ask for the area and city in words'];
+  return ['Your device did not share a location', 'I\'ll ask for the area and city in words'];
+}
+function answeredDevice(sentence) {
+  const [title, detail] = deviceOutcome(sentence);
+  if (askingStep) { stepText(askingStep, title, detail, ''); askingStep.classList.remove('active'); askingStep = null; } else think(title, detail);
 }
 function thinkDone() { $('#think').querySelectorAll('li.active').forEach(li => li.classList.remove('active')); }
 function thinkReset() { const li = el('li', undefined, 'idle'); li.append(el('i')); const d = el('div'); d.append(el('span', THINK_IDLE)); li.append(d); $('#think').replaceChildren(li); }
@@ -162,6 +213,7 @@ function thinkReset() { const li = el('li', undefined, 'idle'); li.append(el('i'
 function explainCall(ev) {
   if (ev.name === 'scout_agent') return ['I\'ll ask the scout agent what the search tool needs', short(ev.args.request, 140)];
   if (ev.name === 'ask_user') return ['The scout agent needs more from you, so I\'m asking you', short(ev.args.question, 140)];
+  if (ev.name === 'ask_browser') return ['Asking your device where you are', 'you decide: Allow or Block'];
   return [`Calling ${ev.name}`, short(ev.args, 120)];
 }
 function explainScout(data) {
@@ -170,7 +222,7 @@ function explainScout(data) {
     return n ? [`Scout agent searched Google Maps and found ${n} places`, best ? `best overall: ${best.name} (${best.rating} ★, ${best.reviews} reviews)` : data.args && data.args.query]
              : ['Scout agent says it is ready and built the search arguments', data.args && data.args.query];
   }
-  if (data.status === 'needs_input') return ['Scout agent says it is missing ' + ((data.missing || []).map(m => FIELD_NAMES[m] || m).join(' and ') || 'a detail'), 'I\'ll relay its question to you'];
+  if (data.status === 'needs_input') return ['Scout agent says it is missing ' + ((data.missing || []).map(m => FIELD_NAMES[m] || m).join(' and ') || 'a detail'), (data.missing || []).join() === 'location' ? 'I\'ll ask your device' : 'I\'ll relay its question to you'];
   return ['Scout agent could not finish', data.problem];
 }
 
@@ -179,16 +231,21 @@ function handle(ev) {
     case 'thought':
       think(ev.text, undefined, 'note'); break;
     case 'tool_call': {
-      const [title, detail] = explainCall(ev); think(title, detail, ev.name === 'ask_user' ? 'ask' : ''); break;
+      const [title, detail] = explainCall(ev); const line = think(title, detail, ev.name === 'ask_user' || ev.name === 'ask_browser' ? 'ask' : '');
+      if (ev.name === 'ask_browser') askingStep = line;
+      break;
     }
     case 'tool_result':
       if (ev.name === 'scout_agent' && ev.data && typeof ev.data === 'object') {
         const [title, detail] = explainScout(ev.data); think(title, detail, ev.data.status === 'failed' ? 'bad' : '');
+        askMissing = ev.data.status === 'needs_input' ? ev.data.missing || [] : [];
+        if (ev.data.status === 'ready') { turnWork = 'found'; lastType = ev.data.business_type || lastType; } else if (ev.data.status === 'failed') turnWork = 'failed';
         if (ev.data.status !== 'needs_input') return addResult(ev.data);
       } else if (ev.name === 'ask_user') think('Got your answer', short(ev.data, 100));
+      else if (ev.name === 'ask_browser') answeredDevice(ev.data);
       break;
     case 'sub':
-      if (ev.kind === 'tool_call' && ev.name === 'search_places') think('Scout agent is searching Google Maps', ev.args.query + (ev.args.radius_m ? ` within ${ev.args.radius_m / 1000} km` : ''));
+      if (ev.kind === 'tool_call' && ev.name === 'search_places') think('Scout agent is searching Google Maps', ev.args.query + (ev.args.pin === 'device' ? ' around you' : '') + (ev.args.radius_m ? ` within ${ev.args.radius_m / 1000} km` : ''));
       else if (ev.kind === 'tool_call') think('Scout agent is looking up the map pin', (ev.args.area ? `${ev.args.area}, ${ev.args.city}` : short(ev.args, 100)));
       else if (ev.kind === 'tool_result' && ev.name === 'search_places') {
         const n = /"count":\s*(\d+)/.exec(ev.content || '');
@@ -196,7 +253,11 @@ function handle(ev) {
       } else if (ev.kind === 'tool_result' && /error/.test(ev.content || '')) think('Map lookup failed, trying again or asking', undefined, 'bad');
       break;
     case 'interrupt':
-      hideTyping(); waiting = true; think('Paused. Waiting for your answer', undefined, 'ask'); return addBot(ev.question, 'ask');
+      hideTyping(); waiting = true; waitingStep = think('Paused. Waiting for your answer', undefined, 'ask'); return addBot(ev.question, 'ask');
+    case 'browser':
+      hideTyping(); waiting = true;
+      if (askingStep) stepText(askingStep, undefined, 'waiting for you: Allow or Block', 'ask'); else askingStep = think('Asking your device where you are', 'waiting for you: Allow or Block', 'ask');
+      return askBrowser();
     case 'message':
       hideTyping(); think('Done. Replying to you'); thinkDone(); return addBot(ev.text);
     case 'error':
@@ -208,9 +269,10 @@ function handle(ev) {
 
 function setBusy(on) {
   busy = on; $('#send').disabled = on || locked; $('#input').disabled = on || locked;
+  $('#think-title').textContent = on ? 'AGENTS ARE WORKING' : 'WHAT THE AGENTS DID';
   const hint = $('#composer-hint'); hint.hidden = !((waiting || locked) && !on);
-  hint.textContent = locked ? 'This chat has ended. Start a new chat to continue' : 'The coordinator is waiting for your answer';
-  $('#input').placeholder = locked ? 'Start a new chat to ask again…' : waiting ? 'Type your answer…' : matchMedia('(max-width:640px)').matches ? 'Find a place…' : 'Ask the coordinator to find a place…';
+  hint.textContent = locked ? 'This chat has ended. Start a new chat to continue' : locating ? 'Waiting for your device. You can also type the area and city' : 'The coordinator is waiting for your answer';
+  $('#input').placeholder = locked ? 'Start a new chat to ask again…' : locating ? 'Or type the area and city…' : waiting ? 'Type your answer…' : matchMedia('(max-width:640px)').matches ? 'Find a place…' : 'Ask the coordinator to find a place…';
   if (!on && !locked && !matchMedia('(hover:none)').matches) $('#input').focus(); // on a phone this would raise the keyboard over the answer
 }
 
@@ -230,12 +292,28 @@ async function drain() {
 
 async function send(text) {
   if (busy || locked || !text.trim()) return;
+  cancelLocating('You typed an answer instead.');
   record({ u: text }, text); renderHistory();
   addUser(text); $('#input').value = ''; autosize(); setBusy(true); showTyping();
-  if (waiting) think('You answered, so I\'m handing it back to the scout agent', short(text, 100));
-  else { thinkReset(); think('Reading your message', short(text, 120)); }
+  if (waiting && waitingStep) { stepText(waitingStep, 'You answered, so I\'m handing it back to the scout agent', short(text, 100), ''); waitingStep.classList.remove('active'); waitingStep = null; }
+  else if (waiting) think('You answered, so I\'m handing it back to the scout agent', short(text, 100));
+  else think('You asked', short(text, 120), 'turn');  // the timeline keeps the steps of earlier messages above this one
+  turnWork = '';
+  await stream({ thread_id: threadId, message: text });
+}
+
+// The answer to "where are you?": the position (or the reason there is none) travels next to the chat, never inside a message.
+// It is not shown in the chat and not saved with it.
+async function answerBrowser(fields) {
+  while (busy) await sleep(60);  // the stream that asked is still finishing
+  if (locked) return;
+  setBusy(true); showTyping();
+  await stream({ thread_id: threadId, ...fields });
+}
+
+async function stream(body) {
   try {
-    const resp = await api('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: threadId, message: text }) });
+    const resp = await api('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw Error(e.error || 'The server rejected the message.'); }
     const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -248,8 +326,54 @@ async function send(text) {
   save(); renderHistory(); setBusy(false);
 }
 
+// ---- Asking the device (the coordinator's ask_browser)
+//  Level 1  Chrome answers by itself (Allow, or already allowed): the position is sent.
+//  Level 2  nothing yet after 10 s: a "Use my location" button; a tap asks Chrome again (a fresh 12 s wait for the device).
+//  Level 3  blocked, or the second try failed, or the person types: the scout agent asks for the area and city in words.
+function getPosition(waitMs) {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve({ error: 'unsupported' });
+    navigator.geolocation.getCurrentPosition(
+      p => resolve({ position: { lat: p.coords.latitude, lng: p.coords.longitude, accuracy_m: p.coords.accuracy } }),
+      e => resolve({ error: e.code === 1 ? 'denied' : e.code === 3 ? 'timeout' : 'unavailable' }),
+      { enableHighAccuracy: false, timeout: waitMs, maximumAge: 120000 });
+  });
+}
+function cancelLocating(note) { if (locating) locating.cancel(note); }
+function addNote(text) { started(); const m = el('div', undefined, 'msg bot'); m.append(head(HEAD.deviceNote), el('div', text, 'bubble')); $('#thread').append(m); scrollDown(); }
+function askBrowser() {
+  cancelLocating();
+  if (!live) { addNote('I asked your device for your location.'); return Promise.resolve(); }  // a saved chat is shown again: nothing is asked
+  started();
+  const m = el('div', undefined, 'msg bot ask'), b = el('div', undefined, 'bubble');
+  const line = el('div', 'Asking your device where you are. Please tap Allow in the popup.'), note = el('div', 'Used for this search only. It is not saved.', 'loc-note');
+  const actions = el('div', undefined, 'loc-actions'), button = el('button', '📍 Use my location', 'chip loc-btn'); button.type = 'button'; button.hidden = true;
+  const tag = el('div', 'needs your location', 'tag'); actions.append(button); b.append(tag, line, note, actions);
+  const heading = head(HEAD.device); m.append(heading, b); $('#thread').append(m); scrollDown();
+  let finished = false, tries = 0, timer = null;
+  const close = (text, label) => { finished = true; clearTimeout(timer); line.textContent = text; if (label) { tag.textContent = label; if (DEVICE_HEAD[label]) setHead(heading, DEVICE_HEAD[label]); } button.hidden = true; note.hidden = true; locating = null; setBusy(busy); };
+  const done = (text, fields, label) => { if (finished) return; close(text, label); answerBrowser(fields); };
+  const showButton = why => { if (finished) return; button.hidden = false; button.disabled = false; line.textContent = why; scrollDown(); };
+  const attempt = async () => {
+    const mine = ++tries; button.disabled = true; clearTimeout(timer);
+    timer = setTimeout(() => showButton('Still waiting for your device. If no popup appeared, tap the button, or just type the area and city below.'), LOCATE_BUTTON_MS);
+    const got = await getPosition(LOCATE_WAIT_MS);
+    if (finished) return;
+    if (got.position) return done(`Got your location${got.position.accuracy_m ? ` (accurate to about ${Math.round(got.position.accuracy_m)} m)` : ''}. Searching around you.`, { location: got.position }, 'location shared');
+    if (mine !== tries) return;  // an older try that failed after the person tapped again: the newer one decides
+    if (got.error === 'denied' || got.error === 'unsupported') return done(got.error === 'denied' ? 'Location is blocked for this site, so I\'ll ask for the area and city instead.' : 'This browser cannot share a location, so I\'ll ask for the area and city instead.', { location_error: got.error }, got.error === 'denied' ? 'location blocked' : 'not shared');
+    if (mine >= 2) return done('Your device did not answer, so I\'ll ask for the area and city instead.', { location_error: got.error }, 'no answer');
+    showButton('Your device did not answer. Tap the button to try again, or just type the area and city below.');
+  };
+  button.addEventListener('click', attempt);
+  locating = { cancel: note => { if (!finished) close(note || 'Stopped asking your device.', 'typed instead'); } };
+  attempt(); setBusy(busy);
+  return Promise.resolve();
+}
+
 function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
 function clearScreen() {
+  cancelLocating(); askingStep = null; waitingStep = null; turnWork = ''; askMissing = []; lastType = '';
   waiting = false; busy = false; locked = false; queue.length = 0; hideTyping();
   $('#thread').replaceChildren();
   $('.chatcol').classList.remove('started'); $('.tracecol').classList.remove('thinking'); thinkReset();

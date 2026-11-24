@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 
 from groq import BadRequestError
@@ -8,6 +9,8 @@ from langchain_groq import ChatGroq
 from pydantic import BaseModel, ValidationError
 
 from app import config
+
+log = logging.getLogger('scout.llm')
 
 
 def get_llm(name: str | None = None) -> ChatGroq:
@@ -73,3 +76,54 @@ class RecoverStructuredReply(AgentMiddleware):
 
 def recover_structured_reply() -> RecoverStructuredReply:
     return RecoverStructuredReply()
+
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    return ''.join(b.get('text', '') for b in content if isinstance(b, dict)) if isinstance(content, list) else ''
+
+
+def _last_ai(response) -> AIMessage | None:
+    messages = response.result if isinstance(response, ModelResponse) else [response]
+    return next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
+
+
+def is_empty_reply(response) -> bool:
+    """A model turn with no tool call and no text: nothing to run and nothing to show."""
+    message = _last_ai(response)
+    return message is not None and not message.tool_calls and not _text_of(message.content).strip()
+
+
+REASONING_LADDER = {'low': 'medium', 'medium': 'high'}
+
+
+def _stronger(model):
+    """The same model asked to think a little harder, or the model itself when that is not possible."""
+    effort = REASONING_LADDER.get(getattr(model, 'reasoning_effort', None))
+    return model.model_copy(update={'reasoning_effort': effort}) if effort else model
+
+
+class RetryEmptyReply(AgentMiddleware):
+    """gpt-oss sometimes ends a turn with nothing at all (no tool call, no text, finish reason "stop"). It usually happens right after it wrote
+    the one-sentence note before a tool call into its hidden reasoning: the call it meant to make never comes out. The person then sees a blank
+    screen. An empty turn is never a decision, so the same request is asked again. The retries think a step harder: on the failing decision of
+    a real chat that gave a tool call every time (8 of 8), where the first try gave one in only 4 of 8. The system prompt is not touched."""
+
+    def __init__(self, retries: int = 3):
+        super().__init__()
+        self.retries = retries
+
+    def wrap_model_call(self, request, handler):
+        response = handler(request)
+        for attempt in range(1, self.retries + 1):
+            if not is_empty_reply(response):
+                break
+            log.warning('the model ended its turn with nothing (no tool call, no text): asking again (try %d of %d)', attempt, self.retries)
+            request = request.override(model=_stronger(request.model))
+            response = handler(request)
+        return response
+
+
+def retry_empty_reply(retries: int = 3) -> RetryEmptyReply:
+    return RetryEmptyReply(retries)

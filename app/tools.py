@@ -1,6 +1,7 @@
 """Tools the agents can call.
 
 ask_user       human-in-the-loop: pauses the graph and waits for the person's answer
+ask_browser    pauses the graph and asks the person's browser for their position; it comes back as one sentence, never the numbers
 geocode        turns "Area, City" into a map pin (latitude and longitude) by searching Google Maps
 search_places  runs the Google Maps search (the gosom scraper) around that pin and stores the full results
 scout_agent    runs the scout sub-agent (geocode, then search_places) and returns its structured result
@@ -8,10 +9,10 @@ scout_agent    runs the scout sub-agent (geocode, then search_places) and return
 import math
 
 from langchain_core.tools import tool
-from langgraph.config import get_stream_writer
+from langgraph.config import get_config, get_stream_writer
 from langgraph.types import interrupt
 
-from app import maps_pin, searches
+from app import location, maps_pin, searches
 
 MAX_KM_FROM_CITY = 50  # the longest real hop in the test set (Whitefield) was 18 km
 
@@ -21,6 +22,17 @@ def ask_user(question: str) -> str:
     """Ask the person ONE short question and wait for their answer.
     Use it to relay the question the scout agent asked. Returns the person's reply as text."""
     return str(interrupt({'question': question}))
+
+
+@tool
+def ask_browser() -> str:
+    """Ask the person's browser for their current position: the person taps Allow and the device answers.
+    Use it only when the scout agent says it needs the person's location (missing "location"), and once per request.
+    It is not ask_user: ask_user asks the person a question in words, this asks the device.
+    The app keeps the position; you never get it. Returns one sentence: "Position received.",
+    "Position not available: <reason>." or "The person typed instead: <what they typed>."
+    Whatever it returns, call scout_agent again with the original request plus that sentence."""
+    return str(interrupt({'kind': 'browser'}))
 
 
 def _km(a: dict, b: dict) -> float:
@@ -66,17 +78,28 @@ def _text(content) -> str:
     return ''.join(b.get('text', '') for b in content if isinstance(b, dict))
 
 
+def _thread_id() -> str | None:
+    try:
+        return (get_config().get('configurable') or {}).get('thread_id')
+    except RuntimeError:  # called outside a graph run
+        return None
+
+
 @tool
 def scout_agent(request: str) -> dict:
     """Hand a place request to the scout agent. It finds the map pin, searches Google Maps and returns
     {"status": "ready" | "needs_input" | "failed", ...}. With ready it also returns what the search found
     (the app shows the full results). With needs_input it returns the question to ask the person.
     Pass everything the person said so far."""
-    from app.scout_agent import complete, finalize, get_scout_agent  # imported here to avoid a circular import
+    from app.scout_agent import complete, finalize, get_scout_agent, position_line  # imported here to avoid a circular import
 
     writer = get_stream_writer()  # lets the UI show what the sub-agent does inside this tool call
+    # What the app knows about the person's position: the scout model is told one line about it, never the numbers.
+    thread = _thread_id()
+    position, device = location.state(thread), location.current(thread)
+    line = position_line(position)
     seen, final = 0, {}
-    for state in get_scout_agent().stream({'messages': [{'role': 'user', 'content': request}]}, stream_mode='values'):
+    for state in get_scout_agent().stream({'messages': [{'role': 'user', 'content': request + (f'\n\n{line}' if line else '')}]}, stream_mode='values'):
         for message in state['messages'][seen:]:
             if message.type == 'ai' and message.tool_calls:
                 for call in message.tool_calls:
@@ -90,7 +113,7 @@ def scout_agent(request: str) -> dict:
     if structured is None:
         return {'status': 'failed', 'problem': 'the scout agent returned no structured result'}
     # the report is checked against what the tools really did (the pin, the search) before anyone sees it
-    result = complete(finalize(structured), final['messages'],
-                      notify=lambda args: writer({'agent': 'scout', 'kind': 'tool_call', 'name': 'search_places', 'args': args}))
+    result = complete(finalize(structured, position), final['messages'],
+                      notify=lambda args: writer({'agent': 'scout', 'kind': 'tool_call', 'name': 'search_places', 'args': args}), device=device)
     writer({'agent': 'scout', 'kind': 'result', 'data': result})
     return result
