@@ -43,7 +43,7 @@ def _km(a: dict, b: dict) -> float:
 
 @tool
 def geocode(area: str, city: str, country: str = 'India') -> dict:
-    """Look up the map pin (latitude and longitude) of an area inside a city on Google Maps.
+    """Look up the map pin (latitude and longitude) of an area inside a city.
     Returns {"lat", "lng", "display_name", "km_from_city_centre"}, or {"error"} when the
     area is not found or lands far from the city (probably a different place with the same name)."""
     same = area.strip().lower() == city.strip().lower()
@@ -51,7 +51,7 @@ def geocode(area: str, city: str, country: str = 'India') -> dict:
     if 'error' in hit:
         return {'error': f'no map location found for "{area}" in {city} ({hit["error"]})'}
     if not hit['exact'] and not same:  # Maps showed only a list of results: it does not know this name
-        return {'error': f'no map location found for "{area}" in {city} (Google Maps did not recognise the name)'}
+        return {'error': f'no map location found for "{area}" in {city} (the map lookup did not recognise the name)'}
     if 'error' in centre:
         return {'error': f'could not locate {city} to check the result ({centre["error"]})'}
     gap = _km(hit, centre)
@@ -62,7 +62,7 @@ def geocode(area: str, city: str, country: str = 'India') -> dict:
 
 @tool(response_format='content_and_artifact')
 def search_places(query: str, lat: float, lng: float, radius_m: int | None = None, lang: str = 'en') -> tuple[dict, dict]:
-    """Search Google Maps for the places a list query finds around a map pin, for example "gyms in Koramangala Bangalore".
+    """Search for the places a list query finds around a map pin, for example "gyms in Koramangala Bangalore".
     lat and lng are the pin that geocode returned. radius_m is set only when the person gave a distance.
     Returns {"search_id", "count", "top"} or {"error"}. The full results are stored and shown to the person by the app;
     you only get the count and the best few."""
@@ -87,7 +87,7 @@ def _thread_id() -> str | None:
 
 @tool
 def scout_agent(request: str) -> dict:
-    """Hand a place request to the scout agent. It finds the map pin, searches Google Maps and returns
+    """Hand a place request to the scout agent. It finds the map pin, searches for places and returns
     {"status": "ready" | "needs_input" | "failed", ...}. With ready it also returns what the search found
     (the app shows the full results). With needs_input it returns the question to ask the person.
     Pass everything the person said so far."""

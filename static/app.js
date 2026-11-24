@@ -118,12 +118,20 @@ let turnWork = '';  // what the agents did for the message being shown: '' (noth
 let askMissing = [];  // what the scout agent said it still needs: it decides the heading of the question
 let lastType = '';  // the kind of place of the last search in this chat: a later reply can refer to it
 const HEAD = {
-  working: ['🔎', 'Agents are on it'], device: ['📍', 'Asking your device where you are'], deviceNote: ['📍', 'Asked your device where you are'],
-  pick: ['⭐', 'The agents’ top pick'], wrong: ['⚠️', 'Here’s what went wrong'], snag: ['⚠️', 'The agents hit a snag'], quick: ['💬', 'One quick question'], hello: ['👋', 'Hello from Scout']
+  working: ['bot-work', 'Agents are on it'], device: ['📍', 'Asking your device where you are'], deviceNote: ['📍', 'Asked your device where you are'],
+  pick: ['⭐', 'The agents’ top pick'], wrong: ['bot-bad', 'Here’s what went wrong'], snag: ['bot-bad', 'The agents hit a snag'], quick: ['💬', 'One quick question'], hello: ['👋', 'Hello from Scout']
 };
 const DEVICE_HEAD = { 'location shared': ['📍', 'Got your location'], 'location blocked': ['🚫', 'Location is blocked'], 'not shared': ['📵', 'This browser can’t share a location'], 'no answer': ['⏳', 'Your device did not answer'], 'typed instead': ['✍️', 'You typed the place instead'] };
-function head([icon, text]) { const h = el('div', undefined, 'who'); h.append(el('span', icon, 'wi'), document.createTextNode(text)); return h; }
-function setHead(h, [icon, text]) { h.replaceChildren(el('span', icon, 'wi'), document.createTextNode(text)); }
+// The symbol of a heading: an emoji, or the glowing robot button for what the agents themselves did ('bot', 'bot-work' while they work, 'bot-bad' when it went wrong).
+const ROBOT = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M8 1.9v2.1"/><circle cx="8" cy="1.6" r=".7" fill="#fff" stroke="none"/><rect x="2.8" y="4.2" width="10.4" height="8.4" rx="2.6"/>'
+  + '<circle cx="6" cy="8.2" r=".95" fill="#fff" stroke="none"/><circle cx="10" cy="8.2" r=".95" fill="#fff" stroke="none"/><path d="M6.3 10.5h3.4"/><path d="M1.3 7.2v2.4M14.7 7.2v2.4"/></svg>';
+function symbol(icon) {
+  if (!icon.startsWith('bot')) return el('span', icon, 'wi');
+  const s = el('span', undefined, 'wi rbt' + (icon === 'bot-work' ? ' work' : icon === 'bot-bad' ? ' bad' : '')); s.innerHTML = ROBOT; return s;  // ROBOT is a fixed string, never page text
+}
+function head([icon, text]) { const h = el('div', undefined, 'who'); h.append(symbol(icon), document.createTextNode(text)); return h; }
+function setHead(h, [icon, text]) { h.replaceChildren(symbol(icon), document.createTextNode(text)); }
 function askHead() {
   if (askMissing.includes('business_type')) return ['🔎', 'What should the agents look for?'];
   if (askMissing.includes('area')) return ['📍', 'Where should the agents search?'];
@@ -134,7 +142,7 @@ function replyHead() { return turnWork === 'found' ? HEAD.pick : turnWork === 'f
 function foundHead(data) {
   const a = data.args || {}, near = data.use_device_location || a.pin === 'device', n = data.search && data.search.count;
   const kind = data.business_type || a.query || 'places', where = near ? ' around you' : data.area && data.city ? ` in ${data.area}, ${data.city}` : '';
-  return [near ? '📍' : '🗺️', `Agents brought back ${n ? (n === 1 ? '1 place' : n + ' places') : 'places'} for “${kind}”${where}`];
+  return ['bot', `Agents brought back ${n ? (n === 1 ? '1 place' : n + ' places') : 'places'} for “${kind}”${where}`];
 }
 
 function addBot(text, kind) {
@@ -164,7 +172,7 @@ function addResult(data) {
   card.append(kvRow('business', data.business_type || '-'), kvRow('area', data.area || (near ? 'around you' : '-')), kvRow('city', data.city || (near ? 'where you are' : '-')));
   if (!failed && a.query) {
     card.append(el('div', 'tool arguments', 'args-title'), el('pre', JSON.stringify(a, null, 2), 'args'));
-    const parts = ['gmaps', '-fast-mode', '-json', '-c 1', `-geo "${near ? 'your position' : a.lat + ',' + a.lng}"`];
+    const parts = ['search', '-fast-mode', '-json', '-c 1', `-geo "${near ? 'your position' : a.lat + ',' + a.lng}"`];
     if (a.radius_m != null) parts.push('-radius ' + a.radius_m);
     if (a.lang && a.lang !== 'en') parts.push('-lang ' + a.lang);
     parts.push('-input q.txt');
@@ -219,7 +227,7 @@ function explainCall(ev) {
 function explainScout(data) {
   if (data.status === 'ready') {
     const n = data.search && data.search.count, best = data.search && data.search.highlights && data.search.highlights.best;
-    return n ? [`Scout agent searched Google Maps and found ${n} places`, best ? `best overall: ${best.name} (${best.rating} ★, ${best.reviews} reviews)` : data.args && data.args.query]
+    return n ? [`Scout agent searched and found ${n} places`, best ? `best overall: ${best.name} (${best.rating} ★, ${best.reviews} reviews)` : data.args && data.args.query]
              : ['Scout agent says it is ready and built the search arguments', data.args && data.args.query];
   }
   if (data.status === 'needs_input') return ['Scout agent says it is missing ' + ((data.missing || []).map(m => FIELD_NAMES[m] || m).join(' and ') || 'a detail'), (data.missing || []).join() === 'location' ? 'I\'ll ask your device' : 'I\'ll relay its question to you'];
@@ -245,11 +253,11 @@ function handle(ev) {
       else if (ev.name === 'ask_browser') answeredDevice(ev.data);
       break;
     case 'sub':
-      if (ev.kind === 'tool_call' && ev.name === 'search_places') think('Scout agent is searching Google Maps', ev.args.query + (ev.args.pin === 'device' ? ' around you' : '') + (ev.args.radius_m ? ` within ${ev.args.radius_m / 1000} km` : ''));
+      if (ev.kind === 'tool_call' && ev.name === 'search_places') think('Scout agent is searching for places', ev.args.query + (ev.args.pin === 'device' ? ' around you' : '') + (ev.args.radius_m ? ` within ${ev.args.radius_m / 1000} km` : ''));
       else if (ev.kind === 'tool_call') think('Scout agent is looking up the map pin', (ev.args.area ? `${ev.args.area}, ${ev.args.city}` : short(ev.args, 100)));
       else if (ev.kind === 'tool_result' && ev.name === 'search_places') {
         const n = /"count":\s*(\d+)/.exec(ev.content || '');
-        if (n) think(`Google Maps returned ${n[1]} places`); else think('The Google Maps search failed', undefined, 'bad');
+        if (n) think(`The search returned ${n[1]} places`); else think('The place search failed', undefined, 'bad');
       } else if (ev.kind === 'tool_result' && /error/.test(ev.content || '')) think('Map lookup failed, trying again or asking', undefined, 'bad');
       break;
     case 'interrupt':

@@ -77,6 +77,16 @@ main{max-width:1180px;margin:0 auto;padding:36px 20px 30px;display:grid;grid-tem
 .msg.bot{display:block}
 .msg .who{margin:0 0 5px;font:700 16px/1.35 var(--serif);color:var(--brand-deep)}
 .msg .who .wi{margin-right:8px;font-style:normal;font-size:15px}
+/* The robot button: a glossy green orb with a small robot face, glowing like a status light. Red when something went wrong; it blinks faster while the agents work. */
+.rbt{display:inline-grid;place-items:center;width:30px;height:30px;margin-right:11px!important;vertical-align:-9px;border-radius:50%;
+  background:radial-gradient(circle at 35% 28%,#8ff5cd 0,#1fb88a 46%,#0b7656 100%);border:1px solid #0e8f68;
+  box-shadow:0 0 0 2px rgba(24,170,126,.18),0 0 13px 3px rgba(31,200,150,.7);animation:rbglow 2.4s ease-in-out infinite}
+.rbt.work{animation-duration:1.3s}
+.rbt.bad{background:radial-gradient(circle at 35% 28%,#ff9db0 0,#e11d48 48%,#8f0f2c 100%);border-color:#9f1239;box-shadow:0 0 0 2px rgba(225,29,72,.16),0 0 10px 1px rgba(225,29,72,.5);animation-name:rbglow-bad}
+.rbt svg{display:block;width:19px;height:19px;filter:drop-shadow(0 0 2px rgba(255,255,255,.55))}
+@keyframes rbglow{50%{box-shadow:0 0 0 4px rgba(24,170,126,.1),0 0 18px 5px rgba(31,200,150,.85)}}
+@keyframes rbglow-bad{50%{box-shadow:0 0 0 4px rgba(225,29,72,.1),0 0 18px 5px rgba(240,60,100,.8)}}
+@media(prefers-reduced-motion:reduce){.rbt{animation:none}}
 .msg.bot .bubble{background:transparent;padding:0;color:var(--ink);max-width:100%}
 .msg.ask .bubble{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:12px;padding:12px 16px;box-shadow:0 6px 20px -14px rgba(51,65,85,.4)}
 .tag{display:inline-block;font:500 10px var(--mono);letter-spacing:.8px;text-transform:uppercase;color:var(--brand-deep);background:var(--mint);border-radius:5px;padding:2px 7px;margin-bottom:6px}
