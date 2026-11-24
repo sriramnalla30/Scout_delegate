@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scout · Overview</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2318aa7e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='white' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='1.8' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spectral:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f8fafc;--card:#fff;--ink:#334155;--text:#475569;--muted:#64748b;--line:#e2e8f0;--faint:#cbd5e1;
+  --brand:#18aa7e;--brand-deep:#10676f;--mint:#d0fae5;--amber:#d97706;
+  --serif:'Spectral',Georgia,serif;--sans:'Inter',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;color:var(--text);font:15px/1.55 var(--sans);background-color:var(--bg);
+  background-image:radial-gradient(rgba(29,205,152,.25) 1.2px,transparent 1.4px);background-size:24px 24px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px 56px}
+header{padding:28px 0 6px}
+.eyebrow{font:500 11px var(--mono);letter-spacing:1.4px;color:var(--brand-deep)}
+h1{margin:4px 0 6px;font:600 34px/1.1 var(--serif);color:var(--ink);letter-spacing:-.5px}
+.lead{margin:0;max-width:760px;color:var(--text)}
+.legend{display:flex;gap:8px 20px;flex-wrap:wrap;align-items:center;margin:18px 0 6px;font:500 12px var(--sans);color:var(--ink)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:22px;height:14px;border:1.5px solid var(--faint);border-radius:4px;background:#fff}
+.sw.ai{background:#ecfdf5;border-color:#34d399}
+.sw.tool{background:#1e293b;border-color:#1e293b}
+.sw.disk{background:#f1f5f9;border-color:#94a3b8;border-style:dashed}
+.ln{width:26px;height:0;border-top:3px solid #64748b}
+.ln.ans{border-color:var(--brand)}
+.ln.tool{border-top-style:dashed;border-color:#334155}
+.ln.pause{border-top-style:dashed;border-color:var(--amber)}
+figure{margin:10px 0 0;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 10px 10px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:860px;height:auto}
+figcaption{padding:8px 10px 2px;font-size:13px;color:var(--muted)}
+svg text{font-family:var(--sans)}
+.box{stroke-width:1.6}
+.box.code{fill:#fff;stroke:#cbd5e1}
+.box.ai{fill:#ecfdf5;stroke:#34d399}
+.box.tool{fill:#1e293b;stroke:#1e293b}
+.box.disk{fill:#f1f5f9;stroke:#94a3b8;stroke-dasharray:6 4}
+.pill.code{fill:#f1f5f9;stroke:#cbd5e1}
+.pill.ai{fill:#d0fae5;stroke:#34d399}
+.pilltxt{font:600 9.5px var(--mono);letter-spacing:.8px;fill:#334155}
+.name{font:600 16px var(--sans);fill:#1e293b}
+.name2{font:600 14.5px var(--sans);fill:#1e293b}
+.file{font:400 10.5px var(--mono);fill:#64748b}
+.desc{font:400 12.5px var(--sans);fill:#334155}
+.desc2{font:400 11.5px var(--sans);fill:#475569}
+.muted{font:400 11px var(--sans);fill:#64748b}
+.tname{font:600 14px var(--mono);fill:#fff}
+.tdesc{font:400 11.5px var(--sans);fill:#cbd5e1}
+.chip.dark{fill:#334155}.chip.brand{fill:#10676f}
+.chiptxt{font:500 11px var(--mono);fill:#fff}
+.lbl{font:500 12px var(--sans);fill:#334155}
+.pausetxt{font:500 11.5px var(--sans);fill:#92400e}
+.badge{fill:#334155}
+.badgetxt{font:700 11px var(--sans);fill:#fff}
+.arrow{fill:none;stroke-width:2;stroke-linejoin:round}
+.arrow.req{stroke:#64748b}
+.arrow.ans{stroke:#18aa7e}
+.arrow.tool{stroke:#334155;stroke-dasharray:5 4}
+.arrow.pause{stroke:#d97706;stroke-dasharray:6 4}
+h2{margin:34px 0 10px;font:600 22px/1.2 var(--serif);color:var(--ink)}
+ol.steps{margin:0;padding:0;list-style:none;counter-reset:s;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:10px 28px}
+ol.steps li{counter-increment:s;position:relative;padding-left:36px;min-height:28px}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:24px;height:24px;border-radius:50%;background:#334155;color:#fff;font:700 12px/24px var(--sans);text-align:center}
+code{font:500 12.5px var(--mono);background:#eef2f6;border-radius:4px;padding:1px 5px;color:#1e293b}
+.pause-note{margin:14px 0 0;padding:10px 14px;border-left:4px solid var(--amber);background:#fffbeb;border-radius:0 8px 8px 0;color:#78350f}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card b{display:block;color:var(--ink);margin-bottom:3px}
+.card p{margin:0;font-size:14px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.dot.ok{background:var(--brand)}.dot.ask{background:var(--amber)}.dot.bad{background:#e11d48}
+.foot{margin-top:30px;color:var(--muted);font-size:13px}
+.foot a{color:var(--brand-deep)}
+</style></head>
+<body><div class="wrap">
+<header>
+  <div class="eyebrow">SCOUT · START HERE</div>
+  <h1>How Scout works, on one page</h1>
+  <p class="lead">Scout finds real places on Google Maps from a chat message (“gyms in Koramangala Bangalore”, “yoga near me”). Two AI agents talk and decide; plain code and two tools do the work. Read the picture from the top down, in the order of the numbers.</p>
+</header>
+
+<div class="legend" aria-label="Legend">
+  <span><i class="sw ai"></i>AI agent: a model decides</span>
+  <span><i class="sw"></i>plain code: no model</span>
+  <span><i class="sw tool"></i>tool: does the real work</span>
+  <span><i class="sw disk"></i>saved on disk</span>
+  <span><i class="ln"></i>a request goes down</span>
+  <span><i class="ln ans"></i>an answer comes up</span>
+  <span><i class="ln tool"></i>a tool call and its result</span>
+  <span><i class="ln pause"></i>pause and ask the person</span>
+</div>
+
+<figure>
+  <svg viewBox="0 0 1080 600" role="img" aria-label="Scout in one picture: the chat page sends your message to the API server, which runs the Coordinator. The Coordinator calls the Scout. The Scout calls geocode for a pin and search_places for the places. search_places saves every place on disk, and the page loads the full results from disk by id.">
+    <defs>
+      <marker id="h-req" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 z" fill="#64748b"/></marker>
+      <marker id="h-ans" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 z" fill="#18aa7e"/></marker>
+      <marker id="h-tool" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 z" fill="#334155"/></marker>
+      <marker id="h-pause" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9 z" fill="#d97706"/></marker>
+    </defs>
+    <rect x="190" y="20" width="740" height="64" rx="10" class="box code"/>
+    <rect x="838" y="11" width="78" height="18" rx="9" class="pill code"/>
+    <text x="877" y="24" class="pilltxt" text-anchor="middle">PLAIN CODE</text>
+    <text x="208" y="47" class="name">Chat page</text>
+    <text x="208" y="65" class="file">static/</text>
+    <text x="208" y="78" class="file">index.html · app.js · places.js</text>
+    <text x="440" y="47" class="desc">You type here. After each reply it loads the full results</text>
+    <text x="440" y="65" class="desc">and draws one card per place.</text>
+    <rect x="190" y="130" width="740" height="64" rx="10" class="box code"/>
+    <rect x="838" y="121" width="78" height="18" rx="9" class="pill code"/>
+    <text x="877" y="134" class="pilltxt" text-anchor="middle">PLAIN CODE</text>
+    <text x="208" y="157" class="name">API server</text>
+    <text x="208" y="175" class="file">app/server.py</text>
+    <text x="208" y="188" class="file">FastAPI</text>
+    <text x="440" y="157" class="desc">Checks who you are, runs one turn of the conversation,</text>
+    <text x="440" y="175" class="desc">and streams the reply to the page as it is written.</text>
+    <rect x="190" y="240" width="740" height="84" rx="10" class="box ai"/>
+    <rect x="851" y="231" width="65" height="18" rx="9" class="pill ai"/>
+    <text x="883" y="244" class="pilltxt" text-anchor="middle">AI AGENT</text>
+    <text x="208" y="267" class="name">Coordinator</text>
+    <text x="208" y="285" class="file">prompts/coordinator.md</text>
+    <text x="208" y="298" class="file">app/coordinator.py</text>
+    <text x="440" y="267" class="desc">Talks to the person in short sentences. It never decides what</text>
+    <text x="440" y="285" class="desc">the search needs; it passes on the Scout’s answer.</text>
+    <text x="440" y="310" class="muted">tools it can call</text>
+    <rect x="548" y="296" width="70" height="19" rx="5" class="chip dark"/>
+    <text x="583" y="309.5" class="chiptxt" text-anchor="middle">ask_user</text>
+    <rect x="626" y="296" width="90" height="19" rx="5" class="chip dark"/>
+    <text x="670" y="309.5" class="chiptxt" text-anchor="middle">ask_browser</text>
+    <rect x="723" y="296" width="90" height="19" rx="5" class="chip brand"/>
+    <text x="768" y="309.5" class="chiptxt" text-anchor="middle">scout_agent</text>
+    <rect x="190" y="370" width="740" height="84" rx="10" class="box ai"/>
+    <rect x="851" y="361" width="65" height="18" rx="9" class="pill ai"/>
+    <text x="883" y="374" class="pilltxt" text-anchor="middle">AI AGENT</text>
+    <text x="208" y="397" class="name">Scout</text>
+    <text x="208" y="415" class="file">prompts/scout.md</text>
+    <text x="208" y="428" class="file">app/scout_agent.py</text>
+    <text x="440" y="397" class="desc">Decides what the search needs: a kind of place, an area and a</text>
+    <text x="440" y="415" class="desc">city, or “near me”. Code checks its answer before anyone sees it.</text>
+    <rect x="190" y="500" width="210" height="80" rx="10" class="box tool"/>
+    <text x="206" y="525" class="tname">geocode</text>
+    <text x="206" y="545" class="tdesc">Finds the area on Google Maps</text>
+    <text x="206" y="561" class="tdesc">and returns a pin (lat, lng)</text>
+    <rect x="450" y="500" width="210" height="80" rx="10" class="box tool"/>
+    <text x="466" y="525" class="tname">search_places</text>
+    <text x="466" y="545" class="tdesc">gosom Google Maps scraper:</text>
+    <text x="466" y="561" class="tdesc">query + pin → up to 20 places</text>
+    <rect x="750" y="500" width="180" height="80" rx="10" class="box disk"/>
+    <text x="766" y="525" class="name2">Stored results</text>
+    <text x="766" y="544" class="file">data/searches/&lt;id&gt;.json</text>
+    <text x="766" y="562" class="desc2">no model reads it</text>
+    <path d="M380 84 V128" class="arrow req" marker-end="url(#h-req)"/>
+    <circle cx="380" cy="107.0" r="10" class="badge"/>
+    <text x="380" y="111.0" class="badgetxt" text-anchor="middle">1</text>
+    <text x="398" y="111.0" class="lbl">your message</text>
+    <path d="M380 194 V238" class="arrow req" marker-end="url(#h-req)"/>
+    <circle cx="380" cy="217.0" r="10" class="badge"/>
+    <text x="380" y="221.0" class="badgetxt" text-anchor="middle">2</text>
+    <text x="398" y="221.0" class="lbl">runs one turn</text>
+    <path d="M380 324 V368" class="arrow req" marker-end="url(#h-req)"/>
+    <circle cx="380" cy="347.0" r="10" class="badge"/>
+    <text x="380" y="351.0" class="badgetxt" text-anchor="middle">3</text>
+    <text x="398" y="351.0" class="lbl">scout_agent( request + answers )</text>
+    <path d="M720 130 V86" class="arrow ans" marker-end="url(#h-ans)"/>
+    <text x="738" y="111.0" class="lbl">reply, streamed</text>
+    <path d="M720 240 V196" class="arrow ans" marker-end="url(#h-ans)"/>
+    <text x="738" y="221.0" class="lbl">short reply</text>
+    <path d="M720 370 V326" class="arrow ans" marker-end="url(#h-ans)"/>
+    <circle cx="720" cy="347.0" r="10" class="badge"/>
+    <text x="720" y="351.0" class="badgetxt" text-anchor="middle">6</text>
+    <text x="738" y="351.0" class="lbl">status + count + best 3</text>
+    <path d="M295 456 V498" class="arrow tool" marker-start="url(#h-tool)" marker-end="url(#h-tool)"/>
+    <circle cx="275" cy="477.0" r="10" class="badge"/>
+    <text x="275" y="481.0" class="badgetxt" text-anchor="middle">4</text>
+    <text x="309" y="481.0" class="lbl">area, city → pin</text>
+    <path d="M555 456 V498" class="arrow tool" marker-start="url(#h-tool)" marker-end="url(#h-tool)"/>
+    <circle cx="535" cy="477.0" r="10" class="badge"/>
+    <text x="535" y="481.0" class="badgetxt" text-anchor="middle">4</text>
+    <text x="569" y="481.0" class="lbl">query + pin → places</text>
+    <path d="M660 540 H748" class="arrow req" marker-end="url(#h-req)"/>
+    <circle cx="705" cy="524" r="10" class="badge"/>
+    <text x="705" y="528" class="badgetxt" text-anchor="middle">5</text>
+    <text x="705" y="562" class="lbl" text-anchor="middle">saves all</text>
+    <path d="M930 540 H952 V162 H932" class="arrow ans" marker-end="url(#h-ans)"/>
+    <circle cx="952" cy="350" r="10" class="badge"/>
+    <text x="952" y="354" class="badgetxt" text-anchor="middle">7</text>
+    <text x="970" y="334" class="lbl">page asks for</text>
+    <text x="970" y="350" class="lbl">the full results</text>
+    <text x="970" y="366" class="lbl">by id</text>
+    <path d="M190 282 H165 V52 H188" class="arrow pause" marker-end="url(#h-pause)"/>
+    <text x="155" y="122" class="pausetxt" text-anchor="end">Something missing?</text>
+    <text x="155" y="138" class="pausetxt" text-anchor="end">ask_user or ask_browser</text>
+    <text x="155" y="154" class="pausetxt" text-anchor="end">pauses the run.</text>
+    <text x="155" y="170" class="pausetxt" text-anchor="end">Your answer</text>
+    <text x="155" y="186" class="pausetxt" text-anchor="end">resumes the same run.</text>
+  </svg>
+  <figcaption>One chat message becomes a list of places: the Coordinator talks, the Scout decides, two tools fetch, and the full results go to disk instead of through any model.</figcaption>
+</figure>
+
+<h2>The steps</h2>
+<ol class="steps">
+  <li>You send a message. The page posts it to the API (<code>POST /api/chat</code>).</li>
+  <li>The API runs one turn of the <b>Coordinator</b>, an AI agent that only talks to the person.</li>
+  <li>The Coordinator calls the Scout with the request and every answer you gave so far.</li>
+  <li>The <b>Scout</b>, a second AI agent, works out the kind of place, the area and the city. It calls <code>geocode</code> for a pin, then <code>search_places</code> for the places.</li>
+  <li><code>search_places</code> saves every place to disk under an id. Only the count and the best three go back to the AI.</li>
+  <li>The Scout returns a status, which code checks. The Coordinator turns it into a short reply.</li>
+  <li>The page asks the API for the full results by id and draws one card per place.</li>
+</ol>
+<p class="pause-note"><b>Something missing?</b> The Coordinator calls <code>ask_user</code> (a question in words) or <code>ask_browser</code> (your position, for “near me”). The run pauses. Your answer resumes the same run.</p>
+
+<h2>What the Scout can answer</h2>
+<div class="cards">
+  <div class="card"><b><span class="dot ok"></span>ready</b><p>Places were found. The Coordinator says how many and names the best one.</p></div>
+  <div class="card"><b><span class="dot ask"></span>needs_input</b><p>A detail is missing, or the search found nothing. The Coordinator asks you (at most 3 times).</p></div>
+  <div class="card"><b><span class="dot bad"></span>failed</b><p>A tool broke. The Coordinator says what went wrong in one sentence.</p></div>
+</div>
+
+<h2>Three rules to remember</h2>
+<div class="cards">
+  <div class="card"><b>The models never read the full results.</b><p>They get the count and the best three. The full list lives on disk, by id; only the page loads it.</p></div>
+  <div class="card"><b>Code checks the AI.</b><p>A “ready” answer is kept only if a search really ran with a real pin (<code>finalize</code> and <code>complete</code> in <code>app/scout_agent.py</code>).</p></div>
+  <div class="card"><b>“Near me” keeps your position away from the models.</b><p>The server holds it in memory (<code>app/location.py</code>). The AI sees only “DEVICE LOCATION: available” or “not available”.</p></div>
+</div>
+
+<p class="foot">Every branch in detail (near me, missing details, no results, tool errors, the 3-question limit) is in <a href="scout-flow.html">scout-flow.html</a>. File map and run steps are in the <a href="../README.md">README</a>.</p>
+</div></body></html>

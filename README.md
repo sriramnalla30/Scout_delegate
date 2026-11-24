@@ -5,6 +5,7 @@ A small LangGraph system that shows how one coordinator agent keeps control of a
 ```
 you ──> Coordinator (system prompt in prompts/coordinator.md)
           ├── ask_user(question)     tool · human-in-the-loop: pauses the graph until you answer
+          ├── ask_browser()          tool · pauses the graph and asks your browser for your position ("near me")
           └── scout_agent(request)   sub-agent used as a tool (prompts/scout.md)
                 ├── geocode(place)       tool · searches Google Maps in a headless browser, no key
                 └── search_places(...)   tool · the gosom Google Maps scraper (gmaps binary, fast mode)
@@ -12,10 +13,11 @@ you ──> Coordinator (system prompt in prompts/coordinator.md)
 
 The coordinator decides what to call next from its system prompt:
 
-1. It needs three details: **business type, area, city**.
-2. If one is missing, it calls `ask_user` and the run **pauses** (LangGraph `interrupt`). Your answer resumes the same run.
-3. When all three are known it calls `scout_agent`, which geocodes the area, then runs the Google Maps search (`search_places`) with that pin.
-4. The full results are stored by search id and never pass through a model. The scout agent reports only the count and the best few; the coordinator tells the person in two sentences, and the chat page loads the stored results and shows every place with all its data (see "The search step" below).
+1. The **scout agent** decides what the search needs: a **business type** and a place, which is an **area and a city**, or, for a "near me" request, the person's own position. The coordinator never decides that.
+2. If something is missing, the scout says so. For a detail in words the coordinator calls `ask_user` and the run **pauses** (LangGraph `interrupt`). Your answer resumes the same run.
+3. When the place is named, the scout calls `geocode` for the area, then runs the Google Maps search (`search_places`) with that pin.
+4. For "near me" the scout (an AI reading the request, not a word list) reports `missing ["location"]`. The coordinator calls `ask_browser`, the page asks the browser for the position (the person taps Allow), and the scout is told one line: `DEVICE LOCATION: available`, `not available`, or nothing yet. See "Near me" below.
+5. The full results are stored by search id and never pass through a model. The scout agent reports only the count and the best few; the coordinator tells the person in two sentences, and the chat page loads the stored results and shows every place with all its data (see "The search step" below).
 
 ## Run
 
@@ -44,7 +46,8 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 |---|---|
 | `prompts/coordinator.md`, `prompts/scout.md` | The system prompts. Edit these to change behaviour; no code change needed. |
 | `app/coordinator.py` | The coordinator agent, the pause/resume logic and the event stream. |
-| `app/tools.py` | `ask_user`, `geocode`, `search_places`, `scout_agent`. |
+| `app/tools.py` | `ask_user`, `ask_browser`, `geocode`, `search_places`, `scout_agent`. |
+| `app/location.py` | The device position for one request: checked, rounded to about 110 m, held in memory only, in one of three states (held, could not be read, not asked). |
 | `app/scout_agent.py` | The scout sub-agent, its `Report` output schema, and `complete()`, the code check on a ready report. |
 | `app/auth.py` | Accounts and sign-in: email and password, Google, session tokens, who owns which chat, the laptop's seed accounts. |
 | `app/access.py` | Who may call the API: other sites, the signed-in account, message and sign-in limits. |
@@ -57,7 +60,25 @@ With `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` set (see `.env.example`), e
 | `app/server.py`, `static/` | FastAPI server (server-sent events) and the chat UI. |
 | `static/auth.js`, `static/auth.css` | The sign-in screen, the session token, and the profile (bottom of the history drawer). |
 | `tests/test_offline.py`, `tests/test_search.py`, `tests/test_access.py`, `tests/test_auth.py`, `tests/test_llm.py` | Offline unit tests (no model, no network, no scraper binary). |
-| `tests/live_scenarios.py` | Five scenarios against the real model. |
+| `tests/test_near_me.py`, `tests/test_near_me_flow.py` | Offline tests for "near me": the scout's code checks, the position holder, `ask_browser`, the route and a whole scripted conversation. |
+| `tests/live_scenarios.py` | Scenarios against the real model. |
+
+## Near me
+
+"Gyms near me" names no place, so the app asks the person's device where they are, once per request.
+
+```
+Scout (AI) reads the request:  a place is named   -> area + city -> geocode -> search          (as always)
+                               near me, no line   -> needs_input, missing ["location"]
+Coordinator: ask_browser  ->  the page asks Chrome (Allow)  ->  the position goes to the server, not into the chat
+Scout is told one line:        DEVICE LOCATION: available  -> ready, no area, no city, no geocode; the code searches around the position
+                               DEVICE LOCATION: not available -> it asks for the area and city in words, like any request without a place
+```
+
+- **The AI decides "near me", the code decides what is possible.** The scout prompt describes the idea (no word list); `finalize()` in `app/scout_agent.py` checks the answer against what the app really holds, so a model that believes it has a position it does not have is overruled.
+- **The numbers stay out of the models.** The page sends the position in its own field (`location`, or `location_error`), only when the app asked for it. `ask_browser` returns one sentence ("Position received."), so the conversation memory, the traces and the saved chats never contain it. The code uses it as the search pin and rounds it to about 110 m. The search stored for the page is marked `pin: device` and shows "around your location".
+- **Three levels on the page.** The browser answers (Allow); or after 10 seconds a "Use my location" button appears and a tap asks again (the page runs its own clock, because Chrome's timeout starts only after Allow); or the person types the area and city, which answers the request too. If the person blocks location, the page goes straight to typing.
+- **Run it with `LANGFUSE_TRACING=false` while the prompts are drafts.** At startup the prompt files are saved in Langfuse with the label `production`.
 
 ## The search step
 

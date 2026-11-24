@@ -37,6 +37,8 @@ def _write(path: Path, text: str) -> None:
 def cache_key(args: dict) -> str:
     """The same search asked again: same text, same pin (to about 10 m), radius and language."""
     parts = [args['query'].lower(), f"{args['lat']:.4f}", f"{args['lng']:.4f}", str(args.get('radius_m')), args.get('lang', 'en')]
+    if args.get('pin'):  # a search around the person's own position is stored apart, so its page never prints coordinates
+        parts.append(args['pin'])
     return hashlib.sha1('|'.join(parts).encode()).hexdigest()[:20]
 
 
@@ -77,12 +79,12 @@ def outcome(doc: dict, cached: bool) -> dict:
             'top': [{'name': p['name'], 'rating': p['rating'], 'reviews': p['reviews']} for p in top]}
 
 
-def perform(query, lat, lng, radius_m=None, lang='en') -> dict:
+def perform(query, lat, lng, radius_m=None, lang='en', pin=None) -> dict:
     """Run one search, or reuse an identical recent one. Never raises: a failure comes back as
     {"ok": False, "kind", "message", "args"}. A search that finds nothing is ok with count 0 and no search id."""
     args = None
     try:
-        args = gmaps.clean_args(query, lat, lng, radius_m, lang)
+        args = gmaps.clean_args(query, lat, lng, radius_m, lang, pin)
         key = cache_key(args)
         doc = find_recent(key)
         if doc:
