@@ -16,7 +16,7 @@ REQUIRED = ('business_type', 'area', 'city')
 
 
 class GmapsArgs(BaseModel):
-    """The arguments of the Google Maps search tool."""
+    """The arguments of the place search tool."""
     query: str = Field(description='List-search text: "<business type> in <Area> <City>". For a near-me request: the business type alone.')
     lat: float | None = Field(default=None, description='Latitude returned by geocode, or null. Always null for a near-me request: the app adds the position.')
     lng: float | None = Field(default=None, description='Longitude returned by geocode, or null. Always null for a near-me request: the app adds the position.')

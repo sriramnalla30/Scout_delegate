@@ -1,4 +1,4 @@
-// The results of one search: a summary, sort and filter controls, and one card per place with everything Google returned.
+// The results of one search: a summary, sort and filter controls, and one card per place with everything the search returned.
 // It reads one stored search by id (GET /api/searches/<id>), so a saved chat shows the same results again, and any other
 // view (a map, charts) can read the same document. Nothing here talks to a model.
 (() => {
@@ -14,7 +14,7 @@ const SORTS = {
   rating: ['Top rated', (a, b) => (b.rating || 0) - (a.rating || 0) || b.reviews - a.reviews],
   reviews: ['Most reviews', (a, b) => b.reviews - a.reviews],
   near: ['Closest to the pin', (a, b) => (a.distance_m ?? 1e12) - (b.distance_m ?? 1e12)],
-  google: ['Google\'s order', (a, b) => a.rank - b.rank],
+  google: ['Search order', (a, b) => a.rank - b.rank],
 };
 const FILTERS = { open: ['Open now', p => p.live && p.live.open === true], phone: ['Has a phone', p => !!p.phone], web: ['Has a website', p => !!p.website] };
 const PICKS = { best: 'Best overall', most_reviewed: 'Most reviewed', closest: 'Closest' };
@@ -33,7 +33,7 @@ function link(href, text, cls) {
 }
 function today(tz) { try { return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: tz || 'Asia/Kolkata' }).format(new Date()); } catch (e) { return ''; } }
 
-// every field Google returned that has a value, whatever the field is: new scraper fields show up without a code change
+// every field the search returned that has a value, whatever the field is: new scraper fields show up without a code change
 function value(v) {
   if (Array.isArray(v)) return v.map(value).filter(Boolean).join(', ');
   if (v && typeof v === 'object') return Object.entries(v).map(([k, x]) => value(x) && `${human(k)}: ${value(x)}`).filter(Boolean).join(' · ');
@@ -74,7 +74,7 @@ function placeCard(p, tags, position) {
 
   const acts = el('div', undefined, 'pl-acts');
   if (p.phone) add(acts, link('tel:' + p.phone.e164, 'Call', 'pl-btn primary'));
-  add(acts, link(p.directions_url, 'Directions', 'pl-btn'), link(p.maps_url, 'Google Maps', 'pl-btn'), p.website ? link(p.website, 'Website', 'pl-btn') : null);
+  add(acts, link(p.directions_url, 'Directions', 'pl-btn'), link(p.maps_url, 'View on map', 'pl-btn'), p.website ? link(p.website, 'Website', 'pl-btn') : null);
   c.append(acts);
 
   const more = el('details', undefined, 'pl-more'); more.append(el('summary', 'Hours and all details'));
@@ -82,10 +82,10 @@ function placeCard(p, tags, position) {
   const hours = el('table', undefined, 'pl-hours'), now = today(p.timezone);
   Object.entries(p.hours).forEach(([day, text]) => { const tr = el('tr', undefined, day === now ? 'now' : ''); add(tr, el('th', day), el('td', text || 'Closed')); hours.append(tr); });
   const ids = el('dl', undefined, 'pl-fields');
-  [['plus code', p.plus_code], ['coordinates', p.lat != null ? `${p.lat}, ${p.lng}` : ''], ['time zone', p.timezone], ['phone (international)', p.phone && p.phone.e164], ['google order', '#' + p.rank], ['google id', p.id]]
+  [['plus code', p.plus_code], ['coordinates', p.lat != null ? `${p.lat}, ${p.lng}` : ''], ['time zone', p.timezone], ['phone (international)', p.phone && p.phone.e164], ['search order', '#' + p.rank], ['place id', p.id]]
     .filter(([, v]) => v).forEach(([k, v]) => add(ids, el('dt', k), el('dd', v)));
   add(grid, Object.keys(p.hours).length ? hours : el('p', 'Opening hours are not listed.', 'pl-muted'), ids);
-  add(more, grid, el('div', 'Everything Google returned', 'pl-sub'), allFields(p.raw));
+  add(more, grid, el('div', 'Everything the search returned', 'pl-sub'), allFields(p.raw));
   c.append(more);
   return c;
 }
@@ -103,7 +103,7 @@ function download(name, mime, text) {
 
 function coverage(doc) {
   const total = doc.places.length, entries = Object.entries(doc.coverage || {});
-  const box = el('details', undefined, 'pl-cov'); box.append(el('summary', 'What Google returned for these places'));
+  const box = el('details', undefined, 'pl-cov'); box.append(el('summary', 'What the search returned for these places'));
   const grid = el('div', undefined, 'pl-covgrid');
   entries.filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => {
     const bar = el('i'); bar.style.width = (n / total * 100) + '%';
@@ -122,7 +122,7 @@ function build(host, doc) {
 
   const radius = s.max_distance_m != null ? ` · spread over ${dist(s.max_distance_m)}` : '';
   add(root, add(el('div', undefined, 'pl-top'),
-    el('div', 'GOOGLE MAPS · ' + places.length + ' PLACES', 'tag'),
+    el('div', 'SCOUT · ' + places.length + ' PLACES', 'tag'),
     el('h3', a.query),
     el('p', `Around ${a.pin === 'device' ? 'your location' : a.lat + ', ' + a.lng}${radius} · fetched ${ago(doc.viewed_at - doc.created_at)} · took ${(doc.elapsed_ms / 1000).toFixed(1)} s`, 'pl-sub')));
 
