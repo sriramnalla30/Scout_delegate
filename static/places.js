@@ -1,4 +1,4 @@
-// The results of one search: a summary, sort and filter controls, and one card per place with everything the search returned.
+// The results of one search: a summary, sort and filter controls, and one card per place with what the search returned.
 // It reads one stored search by id (GET /api/searches/<id>), so a saved chat shows the same results again, and any other
 // view (a map, charts) can read the same document. Nothing here talks to a model.
 (() => {
@@ -33,7 +33,9 @@ function link(href, text, cls) {
 }
 function today(tz) { try { return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: tz || 'Asia/Kolkata' }).format(new Date()); } catch (e) { return ''; } }
 
-// every field the search returned that has a value, whatever the field is: new scraper fields show up without a code change
+// Search fields the page does not print: internal ids and map numbers, and the opening hours the card already shows as a table.
+const HIDDEN = new Set(['open_hours', 'plus_code', 'latitude', 'longitude', 'longtitude', 'timezone', 'data_id', 'place_id']);
+// every other field the search returned that has a value, whatever the field is: new scraper fields show up without a code change
 function value(v) {
   if (Array.isArray(v)) return v.map(value).filter(Boolean).join(', ');
   if (v && typeof v === 'object') return Object.entries(v).map(([k, x]) => value(x) && `${human(k)}: ${value(x)}`).filter(Boolean).join(' · ');
@@ -42,7 +44,7 @@ function value(v) {
 function allFields(raw) {
   const box = el('dl', undefined, 'pl-fields');
   Object.entries(raw).forEach(([k, v]) => {
-    const text = value(v); if (!text) return;
+    const text = value(v); if (!text || HIDDEN.has(k)) return;
     const dd = /^https?:\/\//i.test(text) ? link(text, text) : el('span', text);
     add(box, el('dt', human(k)), add(el('dd'), dd));
   });
@@ -58,7 +60,7 @@ function placeCard(p, tags, position) {
   if (p.categories.length) add(c, add(el('div', undefined, 'pl-cats'), ...p.categories.map(t => el('span', t, 'pl-cat'))));
 
   const rate = el('div', undefined, 'pl-rate');
-  if (p.rating) add(rate, stars(p.rating), el('b', p.rating.toFixed(1)), el('span', `(${num(p.reviews)} reviews)`), p.score ? el('span', 'weighted ' + p.score.toFixed(2), 'pl-score') : null);
+  if (p.rating) add(rate, stars(p.rating), el('b', p.rating.toFixed(1)), el('span', `(${num(p.reviews)} reviews)`));
   else add(rate, el('span', 'No rating yet', 'pl-muted'));
   add(c, rate);
   if (p.business_status) add(c, el('div', p.business_status, 'pl-warn'));
@@ -82,8 +84,7 @@ function placeCard(p, tags, position) {
   const hours = el('table', undefined, 'pl-hours'), now = today(p.timezone);
   Object.entries(p.hours).forEach(([day, text]) => { const tr = el('tr', undefined, day === now ? 'now' : ''); add(tr, el('th', day), el('td', text || 'Closed')); hours.append(tr); });
   const ids = el('dl', undefined, 'pl-fields');
-  [['plus code', p.plus_code], ['coordinates', p.lat != null ? `${p.lat}, ${p.lng}` : ''], ['time zone', p.timezone], ['phone (international)', p.phone && p.phone.e164], ['search order', '#' + p.rank], ['place id', p.id]]
-    .filter(([, v]) => v).forEach(([k, v]) => add(ids, el('dt', k), el('dd', v)));
+  if (p.phone && p.phone.e164) add(ids, el('dt', 'phone (international)'), el('dd', p.phone.e164));
   add(grid, Object.keys(p.hours).length ? hours : el('p', 'Opening hours are not listed.', 'pl-muted'), ids);
   add(more, grid, el('div', 'Everything the search returned', 'pl-sub'), allFields(p.raw));
   c.append(more);
@@ -102,7 +103,7 @@ function download(name, mime, text) {
 }
 
 function coverage(doc) {
-  const total = doc.places.length, entries = Object.entries(doc.coverage || {});
+  const total = doc.places.length, entries = Object.entries(doc.coverage || {}).filter(([k]) => !HIDDEN.has(k));
   const box = el('details', undefined, 'pl-cov'); box.append(el('summary', 'What the search returned for these places'));
   const grid = el('div', undefined, 'pl-covgrid');
   entries.filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => {
@@ -120,11 +121,12 @@ function build(host, doc) {
   const state = { sort: 'best', filters: new Set(), category: null };
   const root = el('section', undefined, 'places'); root.setAttribute('aria-label', 'Search results');
 
-  const radius = s.max_distance_m != null ? ` · spread over ${dist(s.max_distance_m)}` : '';
+  const facts = [a.pin === 'device' && 'Around your location', s.max_distance_m != null && `spread over ${dist(s.max_distance_m)}`,
+    `fetched ${ago(doc.viewed_at - doc.created_at)}`, `took ${(doc.elapsed_ms / 1000).toFixed(1)} s`].filter(Boolean).join(' · ');
   add(root, add(el('div', undefined, 'pl-top'),
     el('div', 'SCOUT · ' + places.length + ' PLACES', 'tag'),
     el('h3', a.query),
-    el('p', `Around ${a.pin === 'device' ? 'your location' : a.lat + ', ' + a.lng}${radius} · fetched ${ago(doc.viewed_at - doc.created_at)} · took ${(doc.elapsed_ms / 1000).toFixed(1)} s`, 'pl-sub')));
+    el('p', facts, 'pl-sub')));
 
   const kpi = (label, v, hint) => add(el('div', undefined, 'pl-kpi'), el('b', v), el('span', label), hint ? el('small', hint) : null);
   add(root, add(el('div', undefined, 'pl-kpis'),

@@ -171,8 +171,9 @@ function addResult(data) {
   const top = el('div', undefined, 'msg bot'); top.append(head(found ? foundHead(data) : HEAD.snag));
   card.append(kvRow('business', data.business_type || '-'), kvRow('area', data.area || (near ? 'around you' : '-')), kvRow('city', data.city || (near ? 'where you are' : '-')));
   if (!failed && a.query) {
-    card.append(el('div', 'tool arguments', 'args-title'), el('pre', JSON.stringify(a, null, 2), 'args'));
-    const parts = ['search', '-fast-mode', '-json', '-c 1', `-geo "${near ? 'your position' : a.lat + ',' + a.lng}"`];
+    const { lat, lng, ...shown } = a;  // map numbers are not printed on the page
+    card.append(el('div', 'tool arguments', 'args-title'), el('pre', JSON.stringify(shown, null, 2), 'args'));
+    const parts = ['search', '-fast-mode', '-json', '-c 1', `-geo "${near ? 'your position' : 'map pin'}"`];
     if (a.radius_m != null) parts.push('-radius ' + a.radius_m);
     if (a.lang && a.lang !== 'en') parts.push('-lang ' + a.lang);
     parts.push('-input q.txt');
